@@ -13,7 +13,7 @@
       <h1 class="text-2xl font-bold text-gray-800 mt-1">您好，{{ student.name }}</h1>
       <p class="text-xs text-gray-400 mt-0.5">{{ student.email }}</p>
     </div>
-    <button onclick="logout()" class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">登出</button>
+    <a href="/logout" class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition inline-block">登出</a>
   </header>
 
   <main class="max-w-5xl mx-auto px-4 space-y-8">
@@ -133,10 +133,6 @@
       else alert('請假申請失敗');
     }
 
-    function logout() {
-      document.cookie = 'token=; Max-Age=0; path=/;';
-      location.href = '/';
-    }
   </script>
 </body>
 </html>

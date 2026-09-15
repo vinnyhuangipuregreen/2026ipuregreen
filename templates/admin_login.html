@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>「BLIA佛光永續學院」管理系統 - 管理者登入</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#F4F6F8] flex items-center justify-center p-4">
+  <div class="w-full max-w-[420px] bg-white rounded-[32px] shadow-sm border border-gray-100 p-8 sm:p-10 flex flex-col items-center">
+    
+    <!-- 頂部 iPure Green 綠色樹狀 Logo (依圖一比照還原) -->
+    <div class="flex flex-col items-center mb-6">
+      <svg class="w-14 h-14" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="17" r="9" fill="#52B788" />
+        <circle cx="18" cy="21" r="7" fill="#40916C" />
+        <circle cx="30" cy="21" r="7" fill="#74C69D" />
+        <path d="M22 28v11h4V28c0-2-1.8-3.5-4-3.5-1.5 0-3 1-3 2.5z" fill="#8D6E63" />
+      </svg>
+      <span class="text-[#8D6E63] font-serif italic text-lg tracking-wide mt-1">iPure Green</span>
+    </div>
+
+    <!-- 系統標題：改為「BLIA佛光永續學院」管理系統 -->
+    <h1 class="text-2xl font-bold text-[#1B4332] mb-6 text-center tracking-tight">
+      「BLIA佛光永續學院」管理系統
+    </h1>
+
+    <!-- 訊息提示區 (錯誤/成功) -->
+    <div id="alertMsg" class="hidden w-full mb-4 p-3 text-xs rounded-xl border text-center transition"></div>
+
+    <!-- ============================================== -->
+    <!-- 畫面 1：管理者登入表單 -->
+    <!-- ============================================== -->
+    <form id="adminLoginForm" class="w-full space-y-4">
+      <div>
+        <label class="block text-gray-700 font-semibold text-sm mb-1.5">管理者 Email</label>
+        <input 
+          type="email" 
+          id="loginEmail" 
+          required 
+          placeholder="請輸入管理者 Email"
+          class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-[#3B7A57] text-sm text-gray-800 placeholder-gray-400 transition"
+        >
+      </div>
+
+      <div>
+        <label class="block text-gray-700 font-semibold text-sm mb-1.5">管理者密碼</label>
+        <input 
+          type="password" 
+          id="loginPassword" 
+          required 
+          placeholder="請輸入管理者密碼"
+          class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-[#3B7A57] text-sm text-gray-800 placeholder-gray-400 transition"
+        >
+      </div>
+
+      <!-- 綠色登入按鈕 -->
+      <button 
+        type="submit" 
+        class="w-full mt-2 bg-[#3B7A57] hover:bg-[#2D6A4F] text-white py-3.5 rounded-2xl font-medium text-base shadow-sm transition duration-150 active:scale-[0.99]"
+      >
+        登入
+      </button>
+
+      <!-- [登入] 按鈕下方新增 [忘記密碼] 連結 -->
+      <div class="text-center pt-2">
+        <button 
+          type="button" 
+          onclick="switchToForgotView()" 
+          class="text-sm text-gray-500 hover:text-[#3B7A57] hover:underline font-medium transition"
+        >
+          忘記密碼
+        </button>
+      </div>
+    </form>
+
+    <!-- ============================================== -->
+    <!-- 畫面 2：忘記密碼功能畫面 (點擊後切換顯示) -->
+    <!-- ============================================== -->
+    <form id="forgotPasswordForm" class="hidden w-full space-y-4">
+      <div class="text-center mb-2">
+        <h2 class="text-base font-bold text-gray-800">找回管理者密碼</h2>
+        <p class="text-xs text-gray-400 mt-1">輸入您的管理者 Email，系統將寄送密碼至該信箱</p>
+      </div>
+
+      <div>
+        <label class="block text-gray-700 font-semibold text-sm mb-1.5">管理者 Email</label>
+        <input 
+          type="email" 
+          id="forgotEmail" 
+          required 
+          placeholder="請輸入管理者 Email"
+          class="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-[#3B7A57] text-sm text-gray-800 placeholder-gray-400 transition"
+        >
+      </div>
+
+      <button 
+        type="submit" 
+        class="w-full bg-[#3B7A57] hover:bg-[#2D6A4F] text-white py-3.5 rounded-2xl font-medium text-base shadow-sm transition duration-150 active:scale-[0.99]"
+      >
+        寄送密碼到管理者 Email
+      </button>
+
+      <!-- 返回登入連結 -->
+      <div class="text-center pt-2">
+        <button 
+          type="button" 
+          onclick="switchToLoginView()" 
+          class="text-sm text-gray-500 hover:text-gray-700 font-medium transition"
+        >
+          ← 返回登入
+        </button>
+      </div>
+    </form>
+
+  </div>
+
+  <script>
+    const alertBox = document.getElementById('alertMsg');
+    const loginForm = document.getElementById('adminLoginForm');
+    const forgotForm = document.getElementById('forgotPasswordForm');
+
+    function showAlert(msg, isSuccess = false) {
+      alertBox.innerText = msg;
+      alertBox.className = isSuccess 
+        ? "w-full mb-4 p-3 text-xs rounded-xl border bg-green-50 text-green-700 border-green-200 text-center block"
+        : "w-full mb-4 p-3 text-xs rounded-xl border bg-red-50 text-red-600 border-red-200 text-center block";
+    }
+
+    function hideAlert() {
+      alertBox.className = "hidden";
+    }
+
+    // 切換至「忘記密碼」畫面
+    function switchToForgotView() {
+      hideAlert();
+      loginForm.classList.add('hidden');
+      forgotForm.classList.remove('hidden');
+    }
+
+    // 切換回「管理者登入」畫面
+    function switchToLoginView() {
+      hideAlert();
+      forgotForm.classList.add('hidden');
+      loginForm.classList.remove('hidden');
+    }
+
+    // 管理者登入表單送出
+    loginForm.onsubmit = async (e) => {
+      e.preventDefault();
+      hideAlert();
+
+      const formData = new FormData();
+      formData.append('email', document.getElementById('loginEmail').value.trim());
+      formData.append('password', document.getElementById('loginPassword').value.trim());
+
+      const res = await fetch('/api/admin/auth/login', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = '/admin';
+      } else {
+        showAlert(data.error || '登入失敗，請確認帳號密碼！');
+      }
+    };
+
+    // 忘記密碼表單送出
+    forgotForm.onsubmit = async (e) => {
+      e.preventDefault();
+      hideAlert();
+
+      const email = document.getElementById('forgotEmail').value.trim();
+      const res = await fetch('/api/admin/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showAlert(data.message, true);
+      } else {
+        showAlert(data.error || '查無此管理者 Email！', false);
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,19 +1,42 @@
 import os
+import io
+import csv
+from pathlib import Path
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
+from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import jwt
+import openpyxl
 
 app = FastAPI(title="BLIA佛光永續學院簽到系統 - iPure Green")
-templates = Jinja2Templates(directory="templates")
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SECRET_KEY = os.getenv("SECRET_KEY", "ipuregreen-blia-secret-key-2026")
 
-# 模擬記憶體/資料庫儲存 (正式上線可連線 PostgreSQL)
+# 資料庫模擬資料
 db = {
+    # 管理者帳號清單 (最高管理者：service@ipuregreen.org)
+    "admins": [
+        {
+            "id": 1,
+            "email": "service@ipuregreen.org",
+            "password": "2026bila",
+            "status": "active",
+            "role": "superadmin"
+        },
+        {
+            "id": 2,
+            "email": "vinnyhuang.ipuregreen@gmail.com",
+            "password": "123456",
+            "status": "active",
+            "role": "admin"
+        }
+    ],
     "students": [
         {"id": 1, "name": "黃雅筠", "email": "vinnyhuang.ipuregreen@gmail.com", "phone": "0912345678"}
     ],
@@ -23,25 +46,22 @@ db = {
             "title": "導論：自然永續的核心觀念與倫理基礎",
             "course_date": "2026/09/15",
             "course_time": "18:00-22:00",
-            "open_time": "2026-09-15 18:00:00",
-            "close_time": "2026-09-15 22:00:00"
+            "open_time": "2026-09-15 18:00:00"
         },
         {
             "id": 2,
             "title": "健康一體（One Health）與系統思維",
             "course_date": "2026/09/22",
             "course_time": "18:30-21:30",
-            "open_time": "2026-09-22 18:00:00",
-            "close_time": "2026-09-22 21:30:00"
+            "open_time": "2026-09-22 18:00:00"
         }
     ],
     "attendances": {
-        # 鍵為 f"{student_id}_{course_id}" 防止並發重複簽到
         "1_1": {"status": "SIGNED_IN", "signed_at": "2026-09-15 18:05:12"}
     }
 }
 
-# --- 身份認證輔助函式 ---
+# --- 認證輔助函式 ---
 def get_current_student(request: Request):
     token = request.cookies.get("token")
     if not token:
@@ -52,21 +72,44 @@ def get_current_student(request: Request):
     except:
         return None
 
-# --- 頁面路由 ---
+def get_current_admin(request: Request):
+    token = request.cookies.get("admin_token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        admin = next((a for a in db["admins"] if a["id"] == payload.get("id")), None)
+        if admin and admin["status"] == "active":
+            return admin
+    except:
+        return None
+    return None
+
+# ==========================================
+# 前台學員頁面與登入/登出 (秒退登出)
+# ==========================================
 @app.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
-    student = get_current_student(request)
-    if student:
-        return RedirectResponse(url="/dashboard")
-    return templates.TemplateResponse("login.html", {"request": request})
+    token = request.cookies.get("token")
+    if token:
+        student = get_current_student(request)
+        if student:
+            return RedirectResponse(url="/dashboard", status_code=302)
+    return templates.TemplateResponse(request=request, name="login.html", context={})
+
+# 學員登出 (秒退)
+@app.get("/logout")
+async def logout():
+    resp = RedirectResponse(url="/", status_code=302)
+    resp.delete_cookie(key="token", path="/")
+    return resp
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
     student = get_current_student(request)
     if not student:
-        return RedirectResponse(url="/")
+        return RedirectResponse(url="/", status_code=302)
     
-    # 統計個人紀錄
     signed_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "SIGNED_IN")
     leave_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "ON_LEAVE")
     makeup_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "MAKEUP_DONE")
@@ -78,27 +121,27 @@ async def dashboard_page(request: Request):
         status = record["status"] if record else "PENDING"
         courses_view.append({**c, "status": status})
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "student": student,
-        "stats": {
-            "signed": signed_count,
-            "leave": leave_count,
-            "makeup": makeup_count,
-            "absent": absent_count
-        },
-        "courses": courses_view
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "student": student,
+            "stats": {
+                "signed": signed_count,
+                "leave": leave_count,
+                "makeup": makeup_count,
+                "absent": absent_count
+            },
+            "courses": courses_view
+        }
+    )
 
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {
-        "request": request,
-        "students": db["students"],
-        "courses": db["courses"]
-    })
+@app.get("/api/auth/logout")
+async def student_logout():
+    resp = RedirectResponse(url="/", status_code=302)
+    resp.delete_cookie(key="token", path="/")
+    return resp
 
-# --- API 端點 ---
 @app.post("/api/auth/login")
 async def api_login(email: str = Form(...), phone: str = Form(...)):
     student = next((s for s in db["students"] if s["email"].strip().lower() == email.strip().lower() and s["phone"].strip() == phone.strip()), None)
@@ -107,7 +150,7 @@ async def api_login(email: str = Form(...), phone: str = Form(...)):
     
     token = jwt.encode({"id": student["id"], "email": student["email"]}, SECRET_KEY, algorithm="HS256")
     resp = JSONResponse(content={"success": True})
-    resp.set_cookie("token", token, httponly=True, max_age=86400*7)
+    resp.set_cookie("token", token, httponly=True, max_age=86400*7, path="/")
     return resp
 
 @app.post("/api/attendance/checkin")
@@ -117,8 +160,6 @@ async def api_checkin(request: Request):
         raise HTTPException(status_code=401, detail="請先登入")
     data = await request.json()
     course_id = data.get("course_id")
-    
-    # 唯一 key 寫入，防併發衝突
     key = f"{student['id']}_{course_id}"
     db["attendances"][key] = {
         "status": "SIGNED_IN",
@@ -134,7 +175,6 @@ async def api_leave(request: Request):
     data = await request.json()
     course_id = data.get("course_id")
     reason = data.get("reason", "")
-    
     key = f"{student['id']}_{course_id}"
     db["attendances"][key] = {
         "status": "ON_LEAVE",
@@ -142,3 +182,296 @@ async def api_leave(request: Request):
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     return {"success": True}
+
+
+# ==========================================
+# 後台管理：登入 / 修改密碼 / 忘記密碼 / 帳號維護
+# ==========================================
+
+@app.get("/admin/login", response_class=HTMLResponse)
+async def admin_login_page(request: Request):
+    if get_current_admin(request):
+        return RedirectResponse(url="/admin", status_code=302)
+    return templates.TemplateResponse(request=request, name="admin_login.html", context={})
+
+# 關鍵補齊：管理者登入 API
+@app.post("/api/admin/auth/login")
+async def admin_login(email: str = Form(...), password: str = Form(...)):
+    admin = next((a for a in db["admins"] if a["email"].strip().lower() == email.strip().lower() and a["password"] == password.strip()), None)
+    if not admin:
+        return JSONResponse(status_code=401, content={"error": "管理者帳號或密碼錯誤！"})
+    
+    if admin["status"] != "active":
+        return JSONResponse(status_code=403, content={"error": "此管理者帳號已被停用，請聯繫最高管理者！"})
+    
+    token = jwt.encode({"id": admin["id"], "role": admin["role"], "email": admin["email"]}, SECRET_KEY, algorithm="HS256")
+    resp = JSONResponse(content={"success": True})
+    resp.set_cookie("admin_token", token, httponly=True, max_age=86400*7, path="/")
+    return resp
+
+# 管理者登出 (秒退至登入頁)
+@app.get("/api/admin/auth/logout")
+async def admin_logout():
+    resp = RedirectResponse(url="/admin/login", status_code=302)
+    resp.delete_cookie(key="admin_token", path="/")
+    return resp
+
+# 修改管理者密碼 API
+@app.post("/api/admin/auth/change-password")
+async def change_password(request: Request):
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        raise HTTPException(status_code=401, detail="請先登入後台")
+    data = await request.json()
+    old_pwd = data.get("old_password")
+    new_pwd = data.get("new_password")
+    
+    if old_pwd != current_admin["password"]:
+        return JSONResponse(status_code=400, content={"error": "舊密碼不正確！"})
+    if not new_pwd or len(new_pwd) < 4:
+        return JSONResponse(status_code=400, content={"error": "新密碼長度至少需 4 碼！"})
+    
+    current_admin["password"] = new_pwd
+    return {"success": True}
+
+# 忘記密碼 API
+@app.post("/api/admin/auth/forgot-password")
+async def forgot_password(request: Request):
+    data = await request.json()
+    email = data.get("email", "").strip()
+    admin = next((a for a in db["admins"] if a["email"].lower() == email.lower()), None)
+    if admin:
+        print(f"【系統郵件已寄出】收件者: {email}，您的管理者密碼為: {admin['password']}")
+        return {
+            "success": True, 
+            "message": f"密碼已成功寄送至 {email}！(測試環境提示：密碼為 {admin['password']})"
+        }
+    return JSONResponse(status_code=404, content={"error": "查無此管理者 Email，請確認輸入是否正確！"})
+
+# 後台主頁
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        return RedirectResponse(url="/admin/login", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={
+            "admins": db["admins"],
+            "students": db["students"],
+            "courses": db["courses"],
+            "current_admin": current_admin
+        }
+    )
+
+# 課程學員登入狀況頁面 (含圓餅圖)
+@app.get("/admin/courses/{course_id}/attendance", response_class=HTMLResponse)
+async def course_attendance_page(course_id: int, request: Request):
+    if not get_current_admin(request):
+        return RedirectResponse(url="/admin/login", status_code=302)
+    
+    course = next((c for c in db["courses"] if c["id"] == course_id), None)
+    if not course:
+        return RedirectResponse(url="/admin", status_code=302)
+    
+    student_records = []
+    signed_count = 0
+    not_signed_count = 0
+    
+    for s in db["students"]:
+        key = f"{s['id']}_{course['id']}"
+        rec = db["attendances"].get(key)
+        status = rec["status"] if rec else "PENDING"
+        signed_at = rec.get("signed_at", "-") if rec else "-"
+        
+        if status == "SIGNED_IN":
+            signed_count += 1
+        else:
+            not_signed_count += 1
+            
+        student_records.append({
+            "id": s["id"],
+            "name": s["name"],
+            "email": s["email"],
+            "phone": s["phone"],
+            "status": status,
+            "signed_at": signed_at
+        })
+
+    return templates.TemplateResponse(
+        request=request,
+        name="course_attendance.html",
+        context={
+            "course": course,
+            "records": student_records,
+            "signed_count": signed_count,
+            "not_signed_count": not_signed_count,
+            "total_count": len(student_records)
+        }
+    )
+
+# ==========================================
+# 管理者帳號維護 API (CRUD)
+# ==========================================
+@app.post("/api/admin/accounts")
+async def add_admin_account(request: Request):
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        raise HTTPException(status_code=401, detail="未授權")
+    
+    data = await request.json()
+    email = data.get("email", "").strip()
+    password = data.get("password", "").strip()
+    status = data.get("status", "active")
+    
+    if not email or not password:
+        return JSONResponse(status_code=400, content={"error": "請填寫完整帳號與密碼！"})
+    
+    if any(a["email"].lower() == email.lower() for a in db["admins"]):
+        return JSONResponse(status_code=400, content={"error": "該管理者帳號已存在！"})
+    
+    new_id = max([a["id"] for a in db["admins"]], default=0) + 1
+    new_acc = {"id": new_id, "email": email, "password": password, "status": status, "role": "admin"}
+    db["admins"].append(new_acc)
+    return {"success": True, "account": new_acc}
+
+@app.put("/api/admin/accounts/{account_id}")
+async def update_admin_account(account_id: int, request: Request):
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        raise HTTPException(status_code=401, detail="未授權")
+    
+    data = await request.json()
+    target = next((a for a in db["admins"] if a["id"] == account_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="查無此帳號")
+    
+    # 最高權限保護規則：service@ipuregreen.org 不可設定為停用
+    if target["email"].lower() == "service@ipuregreen.org":
+        if data.get("status") == "disabled":
+            return JSONResponse(status_code=400, content={"error": "最高權限帳號不可設定為停用！"})
+        if data.get("password"):
+            target["password"] = data.get("password").strip()
+        return {"success": True, "account": target}
+
+    if data.get("email"): target["email"] = data.get("email").strip()
+    if data.get("password"): target["password"] = data.get("password").strip()
+    if data.get("status"): target["status"] = data.get("status")
+        
+    return {"success": True, "account": target}
+
+@app.delete("/api/admin/accounts/{account_id}")
+async def delete_admin_account(account_id: int, request: Request):
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        raise HTTPException(status_code=401, detail="未授權")
+    
+    target = next((a for a in db["admins"] if a["id"] == account_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="查無此帳號")
+    
+    # 最高權限帳號不可刪除
+    if target["email"].lower() == "service@ipuregreen.org" or target.get("role") == "superadmin":
+        return JSONResponse(status_code=400, content={"error": "此為最高權限帳號 (service@ipuregreen.org)，嚴禁刪除！"})
+    
+    db["admins"] = [a for a in db["admins"] if a["id"] != account_id]
+    return {"success": True}
+
+# ==========================================
+# 學員與課程 CRUD API
+# ==========================================
+@app.post("/api/admin/students")
+async def add_student(request: Request):
+    data = await request.json()
+    new_id = max([s["id"] for s in db["students"]], default=0) + 1
+    new_student = {"id": new_id, "name": data.get("name", "").strip(), "email": data.get("email", "").strip(), "phone": data.get("phone", "").strip()}
+    db["students"].append(new_student)
+    return {"success": True, "student": new_student}
+
+@app.put("/api/admin/students/{student_id}")
+async def update_student(student_id: int, request: Request):
+    data = await request.json()
+    for s in db["students"]:
+        if s["id"] == student_id:
+            s["name"] = data.get("name", s["name"]).strip()
+            s["email"] = data.get("email", s["email"]).strip()
+            s["phone"] = data.get("phone", s["phone"]).strip()
+            return {"success": True, "student": s}
+    raise HTTPException(status_code=404, detail="查無此學員")
+
+@app.delete("/api/admin/students/{student_id}")
+async def delete_student(student_id: int):
+    db["students"] = [s for s in db["students"] if s["id"] != student_id]
+    return {"success": True}
+
+@app.post("/api/admin/students/import")
+async def import_students(file: UploadFile = File(...)):
+    contents = await file.read()
+    filename = file.filename.lower()
+    imported_count = 0
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        rows = list(sheet.iter_rows(values_only=True)) if (sheet := wb.active) else []
+        for r in rows[1:]:
+            if not r or len(r) < 3 or not r[0]: continue
+            new_id = max([s["id"] for s in db["students"]], default=0) + 1
+            db["students"].append({"id": new_id, "name": str(r[0]).strip(), "email": str(r).strip(), "phone": str(r).strip()})
+            imported_count += 1
+    elif filename.endswith(".csv"):
+        text = contents.decode("utf-8-sig", errors="ignore")
+        rows = list(csv.reader(io.StringIO(text)))
+        for r in rows[1:]:
+            if not r or len(r) < 3 or not r[0]: continue
+            new_id = max([s["id"] for s in db["students"]], default=0) + 1
+            db["students"].append({"id": new_id, "name": r[0].strip(), "email": r.strip(), "phone": r.strip()})
+            imported_count += 1
+    return {"success": True, "count": imported_count}
+
+@app.post("/api/admin/courses")
+async def add_course(request: Request):
+    data = await request.json()
+    new_id = max([c["id"] for c in db["courses"]], default=0) + 1
+    new_course = {"id": new_id, "title": data.get("title", "").strip(), "course_date": data.get("course_date", "").strip(), "course_time": data.get("course_time", "").strip(), "open_time": data.get("open_time", "").strip()}
+    db["courses"].append(new_course)
+    return {"success": True, "course": new_course}
+
+@app.put("/api/admin/courses/{course_id}")
+async def update_course(course_id: int, request: Request):
+    data = await request.json()
+    for c in db["courses"]:
+        if c["id"] == course_id:
+            c["title"] = data.get("title", c["title"]).strip()
+            c["course_date"] = data.get("course_date", c["course_date"]).strip()
+            c["course_time"] = data.get("course_time", c["course_time"]).strip()
+            c["open_time"] = data.get("open_time", c["open_time"]).strip()
+            return {"success": True, "course": c}
+    raise HTTPException(status_code=404, detail="查無此課程")
+
+@app.delete("/api/admin/courses/{course_id}")
+async def delete_course(course_id: int):
+    db["courses"] = [c for c in db["courses"] if c["id"] != course_id]
+    return {"success": True}
+
+@app.post("/api/admin/courses/import")
+async def import_courses(file: UploadFile = File(...)):
+    contents = await file.read()
+    filename = file.filename.lower()
+    imported_count = 0
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        rows = list(sheet.iter_rows(values_only=True)) if (sheet := wb.active) else []
+        for r in rows[1:]:
+            if not r or len(r) < 4 or not r[0]: continue
+            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
+            db["courses"].append({"id": new_id, "title": str(r[0]).strip(), "course_date": str(r).strip(), "course_time": str(r).strip(), "open_time": str(r).strip()})
+            imported_count += 1
+    elif filename.endswith(".csv"):
+        text = contents.decode("utf-8-sig", errors="ignore")
+        rows = list(csv.reader(io.StringIO(text)))
+        for r in rows[1:]:
+            if not r or len(r) < 4 or not r[0]: continue
+            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
+            db["courses"].append({"id": new_id, "title": r[0].strip(), "course_date": r.strip(), "course_time": r.strip(), "open_time": r.strip()})
+            imported_count += 1
+    return {"success": True, "count": imported_count}
