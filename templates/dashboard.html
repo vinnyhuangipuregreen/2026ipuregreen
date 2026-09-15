@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>學員簽到儀表板 - BLIA佛光永續學院</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#F8F9FA] pb-16">
+  <!-- 頂部 Header (圖二) -->
+  <header class="max-w-5xl mx-auto px-4 pt-6 pb-4 flex justify-between items-start">
+    <div>
+      <span class="text-xs text-[#3B7A57] font-medium">「BLIA佛光永續學院」簽到系統</span>
+      <h1 class="text-2xl font-bold text-gray-800 mt-1">您好，{{ student.name }}</h1>
+      <p class="text-xs text-gray-400 mt-0.5">{{ student.email }}</p>
+    </div>
+    <button onclick="logout()" class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">登出</button>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 space-y-8">
+    <!-- 四格統計卡片 (圖二) -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.signed }}</div>
+        <div class="text-xs text-gray-500 mt-1">已簽到</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.leave }}</div>
+        <div class="text-xs text-gray-500 mt-1">已請假</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.makeup }}</div>
+        <div class="text-xs text-gray-500 mt-1">完成補課</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.absent }}</div>
+        <div class="text-xs text-gray-500 mt-1">缺課</div>
+      </div>
+    </section>
+
+    <!-- 課程簽到區塊 (圖二) -->
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">🎏 課程簽到</h2>
+        <p class="text-xs text-gray-400 mt-0.5">請依照每堂課的開放時間完成簽到或請假</p>
+      </div>
+
+      <div class="space-y-4">
+        {% for course in courses %}
+        <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
+          <div class="flex justify-between items-start">
+            <h3 class="font-bold text-gray-800 text-base">{{ course.title }}</h3>
+            {% if course.status == 'SIGNED_IN' %}
+              <span class="px-2.5 py-0.5 bg-[#E8F5E9] text-[#2E7D32] text-xs rounded-full font-medium">已簽到</span>
+            {% elif course.status == 'ON_LEAVE' %}
+              <span class="px-2.5 py-0.5 bg-[#FFF3E0] text-[#E65100] text-xs rounded-full font-medium">已請假</span>
+            {% endif %}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-[#F8F9FA] p-3 rounded-xl text-xs text-gray-600">
+            <div>📅 課程日期: <span class="font-medium text-gray-800">{{ course.course_date }}</span></div>
+            <div>🕒 課程時間: <span class="font-medium text-gray-800">{{ course.course_time }}</span></div>
+            <div>🔓 開放時間: <span class="font-medium text-gray-800">{{ course.open_time }}</span></div>
+          </div>
+
+          <p class="text-[11px] text-gray-400">可先請假，簽到需等上課當天</p>
+
+          <div class="grid grid-cols-2 gap-3 pt-1">
+            {% if course.status == 'SIGNED_IN' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl">✓ 已簽到</button>
+            {% else %}
+              <button onclick="doCheckin({{ course.id }})" class="w-full py-2.5 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl transition">簽到</button>
+            {% endif %}
+
+            <button onclick="doLeave({{ course.id }})" {% if course.status != 'PENDING' %}disabled{% endif %}
+              class="w-full py-2.5 rounded-xl text-sm font-medium transition {% if course.status != 'PENDING' %}bg-gray-100 text-gray-400 cursor-not-allowed{% else %}bg-[#E5A84B] hover:bg-[#d6983b] text-white{% endif %}">
+              {% if course.status == 'ON_LEAVE' %}已請假{% else %}請假{% endif %}
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- 已完成紀錄 (圖三) -->
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">📋 已完成紀錄</h2>
+        <p class="text-xs text-gray-400 mt-0.5">每堂課的學員狀況</p>
+      </div>
+
+      <div class="space-y-2.5">
+        {% for course in courses %}
+        <div class="bg-white rounded-2xl px-6 py-4 border border-gray-100 shadow-sm flex justify-between items-center">
+          <div>
+            <div class="font-bold text-gray-800 text-sm">{{ course.title }}</div>
+            <div class="text-xs text-gray-400 mt-0.5">{{ course.course_date }}</div>
+          </div>
+          <div>
+            {% if course.status == 'SIGNED_IN' %}
+              <span class="px-3 py-1 bg-[#E8F5E9] text-[#2E7D32] text-xs rounded-full font-medium">已簽到</span>
+            {% elif course.status == 'ON_LEAVE' %}
+              <span class="px-3 py-1 bg-[#FFF3E0] text-[#E65100] text-xs rounded-full font-medium">已請假</span>
+            {% else %}
+              <span class="px-3 py-1 bg-gray-100 text-gray-400 text-xs rounded-full font-medium">尚未完成</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <script>
+    async function doCheckin(cid) {
+      const res = await fetch('/api/attendance/checkin', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ course_id: cid })
+      });
+      if (res.ok) location.reload();
+      else alert('簽到失敗');
+    }
+
+    async function doLeave(cid) {
+      const reason = prompt('請輸入請假原因：');
+      if (!reason) return;
+      const res = await fetch('/api/attendance/leave', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ course_id: cid, reason })
+      });
+      if (res.ok) location.reload();
+      else alert('請假申請失敗');
+    }
+
+    function logout() {
+      document.cookie = 'token=; Max-Age=0; path=/;';
+      location.href = '/';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>後台管理系統 - BLIA佛光永續學院</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gray-50 p-6">
+  <div class="max-w-6xl mx-auto space-y-6">
+    <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <div>
+        <h1 class="text-xl font-bold text-[#234E36]">「BLIA佛光永續學院」後台管理系統</h1>
+        <p class="text-xs text-gray-500 mt-1">綠色公益基金會 iPure Green 權限控管中心</p>
+      </div>
+    </div>
+
+    <!-- 學員名冊 -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <h2 class="text-base font-bold text-gray-800 mb-4">學員名冊白名單 (目前共 {{ students|length }} 人)</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="p-3">ID</th>
+              <th class="p-3">學員姓名</th>
+              <th class="p-3">Email</th>
+              <th class="p-3">聯絡電話</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for s in students %}
+            <tr>
+              <td class="p-3">{{ s.id }}</td>
+              <td class="p-3 font-medium">{{ s.name }}</td>
+              <td class="p-3">{{ s.email }}</td>
+              <td class="p-3">{{ s.phone }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

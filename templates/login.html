@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>「BLIA佛光永續學院」簽到系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#F4F6F8] flex items-center justify-center p-4">
+  <div class="w-full max-w-[420px] bg-white rounded-3xl shadow-sm border border-gray-100 p-8 flex flex-col items-center">
+    
+    <!-- iPure Green Logo -->
+    <div class="flex flex-col items-center mb-6">
+      <svg class="w-16 h-16 text-[#3B7A57]" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="16" r="10" fill="#4CAF50" fill-opacity="0.8" />
+        <path d="M22 28v12h4V28c0-2.2-1.8-4-4-4s-4 1.8-4 4z" fill="#8D6E63" />
+        <circle cx="16" cy="18" r="6" fill="#81C784" />
+        <circle cx="32" cy="18" r="6" fill="#C8E6C9" />
+      </svg>
+      <span class="text-[#8D6E63] font-serif italic text-lg tracking-wide mt-1">iPure Green</span>
+    </div>
+
+    <h1 class="text-2xl font-bold text-[#234E36] mb-2 text-center tracking-tight">「BLIA佛光永續學院」簽到系統</h1>
+    <p class="text-gray-400 text-sm mb-6 text-center">請使用報名時提供的資料登入</p>
+
+    <div id="errorMsg" class="hidden w-full mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-xl border border-red-100 text-center"></div>
+
+    <form id="loginForm" class="w-full space-y-4">
+      <div>
+        <label class="block text-gray-700 font-semibold text-sm mb-1.5">學員 Email</label>
+        <input type="email" id="email" required placeholder="請輸入報名時提供的 Email"
+          class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-[#3B7A57] text-sm text-gray-800">
+      </div>
+
+      <div>
+        <label class="block text-gray-700 font-semibold text-sm mb-1.5">學員聯絡電話</label>
+        <input type="tel" id="phone" required placeholder="請輸入報名時提供的聯絡電話"
+          class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-[#3B7A57] text-sm text-gray-800">
+      </div>
+
+      <button type="submit" class="w-full mt-4 bg-[#3B7A57] hover:bg-[#316648] text-white py-3.5 rounded-xl font-medium text-base shadow-sm transition">
+        登入
+      </button>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('errorMsg');
+      err.classList.add('hidden');
+      const formData = new FormData();
+      formData.append('email', document.getElementById('email').value);
+      formData.append('phone', document.getElementById('phone').value);
+
+      const res = await fetch('/api/auth/login', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = '/dashboard';
+      } else {
+        err.innerText = data.error;
+        err.classList.remove('hidden');
+      }
+    };
+  </script>
+</body>
+</html>
