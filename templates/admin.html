@@ -5,10 +5,10 @@
   <title>「BLIA佛光永續學院」後台管理系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-[#F4F6F8] p-6 text-gray-800">
-  <div class="max-w-6xl mx-auto space-y-6">
+<body class="min-h-screen bg-[#F4F6F8] p-4 sm:p-6 text-gray-800">
+  <div class="max-w-7xl mx-auto space-y-6">
 
-    <!-- 頂部標題卡 -->
+    <!-- 頂部資訊卡片 (完全比照三張圖的頂部) -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <h1 class="text-xl font-bold text-[#234E36]">「BLIA佛光永續學院」後台管理系統</h1>
@@ -30,160 +30,230 @@
       </div>
     </div>
 
-    <!-- 管理者帳號維護清單 -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
+    <!-- 主架構：左邊 [選單] + 右邊 [維護內容] -->
+    <div class="flex flex-col md:flex-row gap-6 items-start">
+
+      <!-- ============================================== -->
+      <!-- 左側：選單 (Sidebar Menu) -->
+      <!-- ============================================== -->
+      <aside class="w-full md:w-64 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 shrink-0">
+        <div class="text-center pb-3 mb-2 border-b border-gray-100">
+          <h2 class="text-xl font-bold text-gray-800 tracking-wider">選單</h2>
+        </div>
+        
+        <nav class="space-y-1.5">
+          <!-- 功能 1：管理者帳號維護 (第一張圖) -->
+          <button 
+            id="tab-btn-admins" 
+            onclick="switchTab('admins')" 
+            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between"
+          >
             <span>🛡️ 管理者帳號維護</span>
-            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-normal">共 {{ admins|length }} 組帳號</span>
-          </h2>
-          <p class="text-xs text-gray-400 mt-0.5">維護後台登入帳號、密碼與狀態。最高權限帳號不可刪除。</p>
-        </div>
-        <button onclick="openAdminModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
-          + 新增管理者
-        </button>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
-            <tr>
-              <th class="p-3.5">管理者帳號</th>
-              <th class="p-3.5">密碼</th>
-              <th class="p-3.5">狀態</th>
-              <th class="p-3.5">權限等級</th>
-              <th class="p-3.5 text-right w-36">操作</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {% for a in admins %}
-            <tr class="hover:bg-gray-50/60 transition">
-              <td class="p-3.5 font-medium text-gray-800">{{ a.email }}</td>
-              <td class="p-3.5 font-mono text-gray-400 text-xs">••••••••</td>
-              <td class="p-3.5">
-                {% if a.status == 'active' %}
-                  <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full font-medium">● 啟用</span>
-                {% else %}
-                  <span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">○ 停用</span>
-                {% endif %}
-              </td>
-              <td class="p-3.5">
-                {% if a.email == 'service@ipuregreen.org' or a.role == 'superadmin' %}
-                  <span class="text-xs font-bold text-[#3B7A57]">⭐️ 最高管理者</span>
-                {% else %}
-                  <span class="text-xs text-gray-500">一般管理者</span>
-                {% endif %}
-              </td>
-              <td class="p-3.5 text-right space-x-2">
-                <button onclick="editAdmin({{ a.id }}, '{{ a.email }}', '{{ a.password }}', '{{ a.status }}', '{{ a.role }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
-                {% if a.email == 'service@ipuregreen.org' or a.role == 'superadmin' %}
-                  <span class="text-xs text-gray-300 cursor-not-allowed">不可刪除</span>
-                {% else %}
-                  <button onclick="deleteAdmin({{ a.id }}, '{{ a.email }}')" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 學員名冊白名單 -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <h2 class="text-base font-bold text-gray-800">學員名冊白名單 (共 {{ students|length }} 人)</h2>
-          <p class="text-xs text-gray-400 mt-0.5">名冊內的學員方能以 Email 與電話登入前台</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <label class="px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-xl cursor-pointer shadow-sm transition">
-            📥 匯入 Excel/CSV
-            <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadStudentExcel(event)">
-          </label>
-          <button onclick="openStudentModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
-            + 新增學員
+            <span class="text-xs text-gray-400">›</span>
           </button>
-        </div>
-      </div>
 
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
-            <tr>
-              <th class="p-3.5 w-16">ID</th>
-              <th class="p-3.5">學員姓名</th>
-              <th class="p-3.5">Email</th>
-              <th class="p-3.5">聯絡電話</th>
-              <th class="p-3.5 text-right w-36">操作</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {% for s in students %}
-            <tr class="hover:bg-gray-50/60 transition">
-              <td class="p-3.5 text-gray-400 font-mono">{{ s.id }}</td>
-              <td class="p-3.5 font-medium text-gray-800">{{ s.name }}</td>
-              <td class="p-3.5 text-gray-600">{{ s.email }}</td>
-              <td class="p-3.5 text-gray-600">{{ s.phone }}</td>
-              <td class="p-3.5 text-right space-x-2">
-                <button onclick="editStudent({{ s.id }}, '{{ s.name }}', '{{ s.email }}', '{{ s.phone }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
-                <button onclick="deleteStudent({{ s.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 課程清單：[簽到狀況] 與 [請假狀況] -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <h2 class="text-base font-bold text-gray-800">課程清單 (共 {{ courses|length }} 堂)</h2>
-          <p class="text-xs text-gray-400 mt-0.5">點選右側「簽到狀況」或「請假狀況」檢視學員出席狀態</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <label class="px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-xl cursor-pointer shadow-sm transition">
-            📥 匯入 Excel/CSV
-            <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadCourseExcel(event)">
-          </label>
-          <button onclick="openCourseModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
-            + 新增課程
+          <!-- 功能 2：學員名單維護 (第二張圖) -->
+          <button 
+            id="tab-btn-students" 
+            onclick="switchTab('students')" 
+            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between"
+          >
+            <span>👥 學員名單維護</span>
+            <span class="text-xs text-gray-400">›</span>
           </button>
+
+          <!-- 功能 3：課程清單維護 (第三張圖) -->
+          <button 
+            id="tab-btn-courses" 
+            onclick="switchTab('courses')" 
+            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between"
+          >
+            <span>📚 課程清單維護</span>
+            <span class="text-xs text-gray-400">›</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- ============================================== -->
+      <!-- 右側：維護內容顯示區域 -->
+      <!-- ============================================== -->
+      <main class="flex-1 w-full min-w-0">
+
+        <!-- -------------------------------------------- -->
+        <!-- 內容 1：管理者帳號維護 (對應第一張圖) -->
+        <!-- -------------------------------------------- -->
+        <div id="panel-admins" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#3B7A57] inline-block"></span>
+                <span>管理者帳號維護</span>
+                <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-normal">共 {{ admins|length }} 組帳號</span>
+              </h2>
+              <p class="text-xs text-gray-400 mt-0.5">維護後台登入帳號、密碼與狀態。最高權限帳號不可刪除。</p>
+            </div>
+            <button onclick="openAdminModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
+              + 新增管理者
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
+                <tr>
+                  <th class="p-3.5">管理者帳號</th>
+                  <th class="p-3.5">密碼</th>
+                  <th class="p-3.5">狀態</th>
+                  <th class="p-3.5">權限等級</th>
+                  <th class="p-3.5 text-right w-36">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {% for a in admins %}
+                <tr class="hover:bg-gray-50/60 transition">
+                  <td class="p-3.5 font-medium text-gray-800">{{ a.email }}</td>
+                  <td class="p-3.5 font-mono text-gray-400 text-xs">••••••••</td>
+                  <td class="p-3.5">
+                    {% if a.status == 'active' %}
+                      <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full font-medium">● 啟用</span>
+                    {% else %}
+                      <span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full font-medium">○ 停用</span>
+                    {% endif %}
+                  </td>
+                  <td class="p-3.5">
+                    {% if a.email == 'service@ipuregreen.org' or a.role == 'superadmin' %}
+                      <span class="text-xs font-bold text-[#3B7A57]">⭐️ 最高管理者</span>
+                    {% else %}
+                      <span class="text-xs text-gray-500">一般管理者</span>
+                    {% endif %}
+                  </td>
+                  <td class="p-3.5 text-right space-x-2">
+                    <button onclick="editAdmin({{ a.id }}, '{{ a.email }}', '{{ a.password }}', '{{ a.status }}', '{{ a.role }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
+                    {% if a.email == 'service@ipuregreen.org' or a.role == 'superadmin' %}
+                      <span class="text-xs text-gray-300 cursor-not-allowed">不可刪除</span>
+                    {% else %}
+                      <button onclick="deleteAdmin({{ a.id }}, '{{ a.email }}')" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      <div class="space-y-3">
-        {% for c in courses %}
-        <div class="border border-gray-100 rounded-2xl p-5 hover:shadow-sm transition bg-white space-y-3">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <h3 class="font-bold text-gray-800 text-base">{{ c.title }}</h3>
-
+        <!-- -------------------------------------------- -->
+        <!-- 內容 2：學員名單維護 (對應第二張圖) -->
+        <!-- -------------------------------------------- -->
+        <div id="panel-students" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#3B7A57] inline-block"></span>
+                <span>學員名冊白名單 (共 {{ students|length }} 人)</span>
+              </h2>
+              <p class="text-xs text-gray-400 mt-0.5">名冊內的學員方能以 Email 與電話登入前台</p>
+            </div>
             <div class="flex items-center gap-2">
-              <a href="/admin/courses/{{ c.id }}/attendance" class="px-3 py-1.5 bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#2E7D32] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
-                📊 簽到狀況
-              </a>
-              <a href="/admin/courses/{{ c.id }}/leaves" class="px-3 py-1.5 bg-[#FFF3E0] hover:bg-[#FFE0B2] text-[#E65100] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
-                📝 請假狀況
-              </a>
-              <button onclick="editCourse({{ c.id }}, '{{ c.title }}', '{{ c.course_date }}', '{{ c.course_time }}', '{{ c.open_time }}')" class="text-xs text-[#3B7A57] hover:underline font-medium ml-1">修改</button>
-              <button onclick="deleteCourse({{ c.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+              <label class="px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-xl cursor-pointer shadow-sm transition flex items-center gap-1.5">
+                <span>📥 匯入 Excel/CSV</span>
+                <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadStudentExcel(event)">
+              </label>
+              <button onclick="openStudentModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
+                + 新增學員
+              </button>
             </div>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-[#F8F9FA] p-3 rounded-xl text-xs text-gray-600">
-            <div>📅 課程日期: <span class="font-medium text-gray-800">{{ c.course_date }}</span></div>
-            <div>🕒 課程時間: <span class="font-medium text-gray-800">{{ c.course_time }}</span></div>
-            <div>🔓 開放時間: <span class="font-medium text-gray-800">{{ c.open_time }}</span></div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
+                <tr>
+                  <th class="p-3.5 w-16">ID</th>
+                  <th class="p-3.5">學員姓名</th>
+                  <th class="p-3.5">Email</th>
+                  <th class="p-3.5">聯絡電話</th>
+                  <th class="p-3.5 text-right w-36">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {% for s in students %}
+                <tr class="hover:bg-gray-50/60 transition">
+                  <td class="p-3.5 text-gray-400 font-mono">{{ s.id }}</td>
+                  <td class="p-3.5 font-medium text-gray-800">{{ s.name }}</td>
+                  <td class="p-3.5 text-gray-600">{{ s.email }}</td>
+                  <td class="p-3.5 text-gray-600">{{ s.phone }}</td>
+                  <td class="p-3.5 text-right space-x-2">
+                    <button onclick="editStudent({{ s.id }}, '{{ s.name }}', '{{ s.email }}', '{{ s.phone }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
+                    <button onclick="deleteStudent({{ s.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
-        {% endfor %}
-      </div>
+
+        <!-- -------------------------------------------- -->
+        <!-- 內容 3：課程清單維護 (對應第三張圖) -->
+        <!-- -------------------------------------------- -->
+        <div id="panel-courses" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-[#3B7A57] inline-block"></span>
+                <span>課程清單 (共 {{ courses|length }} 堂)</span>
+              </h2>
+              <p class="text-xs text-gray-400 mt-0.5">點選右側「簽到狀況」或「請假狀況」檢視學員出席狀態</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-xl cursor-pointer shadow-sm transition flex items-center gap-1.5">
+                <span>📥 匯入 Excel/CSV</span>
+                <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadCourseExcel(event)">
+              </label>
+              <button onclick="openCourseModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
+                + 新增課程
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            {% for c in courses %}
+            <div class="border border-gray-100 rounded-2xl p-5 hover:shadow-sm transition bg-white space-y-3">
+              <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <h3 class="font-bold text-gray-800 text-base">{{ c.title }}</h3>
+
+                <!-- 右側操作按鈕：簽到狀況、請假狀況、修改、刪除 -->
+                <div class="flex items-center gap-2">
+                  <a href="/admin/courses/{{ c.id }}/attendance" class="px-3 py-1.5 bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#2E7D32] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
+                    📊 簽到狀況
+                  </a>
+                  <a href="/admin/courses/{{ c.id }}/leaves" class="px-3 py-1.5 bg-[#FFF3E0] hover:bg-[#FFE0B2] text-[#E65100] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
+                    📝 請假狀況
+                  </a>
+                  <button onclick="editCourse({{ c.id }}, '{{ c.title }}', '{{ c.course_date }}', '{{ c.course_time }}', '{{ c.open_time }}')" class="text-xs text-[#3B7A57] hover:underline font-medium ml-1">修改</button>
+                  <button onclick="deleteCourse({{ c.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-[#F8F9FA] p-3 rounded-xl text-xs text-gray-600">
+                <div>📅 課程日期: <span class="font-medium text-gray-800">{{ c.course_date }}</span></div>
+                <div>🕒 課程時間: <span class="font-medium text-gray-800">{{ c.course_time }}</span></div>
+                <div>🔓 開放時間: <span class="font-medium text-gray-800">{{ c.open_time }}</span></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+      </main>
     </div>
   </div>
 
-  <!-- 管理者 Modal -->
+  <!-- ============================================== -->
+  <!-- 彈窗群 (Modal) -->
+  <!-- ============================================== -->
+
+  <!-- 管理者帳號 Modal -->
   <div id="adminModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-lg space-y-4">
       <h3 id="adminModalTitle" class="text-lg font-bold text-gray-800">新增管理者帳號</h3>
@@ -274,7 +344,43 @@
     </div>
   </div>
 
+  <!-- JavaScript 控制邏輯 (含切換選單與 CRUD) -->
   <script>
+    // ===== 選單切換邏輯 (核心功能) =====
+    function switchTab(tabId) {
+      // 1. 隱藏所有內容區塊
+      document.getElementById('panel-admins').classList.add('hidden');
+      document.getElementById('panel-students').classList.add('hidden');
+      document.getElementById('panel-courses').classList.add('hidden');
+
+      // 2. 還原所有按鈕樣式
+      const tabs = ['admins', 'students', 'courses'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab-btn-' + t);
+        btn.className = "w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between text-gray-600 hover:bg-gray-50";
+      });
+
+      // 3. 顯示選取的內容區塊
+      const targetPanel = document.getElementById('panel-' + tabId);
+      if (targetPanel) targetPanel.classList.remove('hidden');
+
+      // 4. 高亮顯示選取的按鈕 (黃底黑字或深綠高亮風格)
+      const activeBtn = document.getElementById('tab-btn-' + tabId);
+      if (activeBtn) {
+        activeBtn.className = "w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between bg-yellow-200/90 text-gray-900 border border-yellow-300 shadow-xs";
+      }
+
+      // 5. 記住目前頁籤，重新整理不遺失
+      localStorage.setItem('admin_current_tab', tabId);
+    }
+
+    // 頁面載入時讀取上次選擇的選單 (預設為 admins)
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedTab = localStorage.getItem('admin_current_tab') || 'admins';
+      switchTab(savedTab);
+    });
+
+    // ===== 管理者帳號維護 =====
     function openAdminModal() {
       document.getElementById('modalAdminId').value = '';
       document.getElementById('modalAdminEmail').value = '';
@@ -318,11 +424,11 @@
     async function deleteAdmin(id, email) {
       if (!confirm(`確定要刪除管理者帳號 [${email}] 嗎？`)) return;
       const res = await fetch(`/api/admin/accounts/${id}`, { method: 'DELETE' });
-      const data = await res.json();
       if (res.ok) location.reload();
-      else alert(data.error || '刪除失敗');
+      else alert('刪除失敗');
     }
 
+    // ===== 修改個人密碼 =====
     function openChangePwdModal() { document.getElementById('pwdModal').classList.remove('hidden'); }
     function closeChangePwdModal() { document.getElementById('pwdModal').classList.add('hidden'); }
     async function saveNewPassword() {
@@ -335,6 +441,7 @@
       else alert(data.error);
     }
 
+    // ===== 學員操作 =====
     function openStudentModal() {
       document.getElementById('modalStudentId').value = '';
       document.getElementById('modalStudentName').value = '';
@@ -379,6 +486,7 @@
       else alert('匯入失敗');
     }
 
+    // ===== 課程操作 =====
     function openCourseModal() {
       document.getElementById('modalCourseId').value = '';
       document.getElementById('modalCourseTitle').value = '';
