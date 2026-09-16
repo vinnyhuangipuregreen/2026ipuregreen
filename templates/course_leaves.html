@@ -6,9 +6,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen bg-[#F4F6F8] p-4 sm:p-6 text-gray-800">
-  <div class="max-w-6xl mx-auto space-y-6">
+  <div class="max-w-7xl mx-auto space-y-6">
 
-    <!-- 頂部資訊卡片 -->
+    <!-- 頂部卡片 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <a href="/admin" class="text-xs text-[#3B7A57] hover:underline font-medium">← 返回後台課程列表</a>
@@ -21,9 +21,7 @@
       </div>
     </div>
 
-    <!-- ============================================== -->
-    <!-- 核心功能：【學員請假名冊複合查詢】(依截圖設計) -->
-    <!-- ============================================== -->
+    <!-- 複合查詢 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
       <div class="flex justify-between items-center">
         <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
@@ -37,7 +35,6 @@
         </button>
       </div>
 
-      <!-- 3 個複合查詢欄位：學員姓名、Email、聯絡電話 (完全依附圖樣式) -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#F8F9FA] p-4 rounded-2xl border border-gray-100 text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1.5">學員姓名</label>
@@ -51,7 +48,7 @@
         </div>
 
         <div>
-          <label class="block font-semibold text-gray-600 mb-1.5">Email</label>
+          <label class="block font-semibold text-gray-600 mb-1.5">Email / 補課平台 Email</label>
           <input 
             type="text" 
             id="filterEmail" 
@@ -73,7 +70,7 @@
         </div>
       </div>
 
-      <!-- 請假學員清單表格 -->
+      <!-- 表格：包含 Email(補課平台) -->
       <div class="pt-2">
         {% if total_count == 0 %}
           <div class="py-12 text-center text-gray-400 text-sm">
@@ -86,6 +83,7 @@
                 <tr>
                   <th class="p-3.5">學員姓名</th>
                   <th class="p-3.5">Email</th>
+                  <th class="p-3.5 text-blue-700">Email(補課平台)</th>
                   <th class="p-3.5">聯絡電話</th>
                   <th class="p-3.5">請假原因</th>
                   <th class="p-3.5">申請時間</th>
@@ -97,9 +95,11 @@
                 <tr class="leave-row hover:bg-gray-50/60 transition"
                     data-name="{{ r.name|lower }}"
                     data-email="{{ r.email|lower }}"
+                    data-pathdemy="{{ r.email_pathdemy|lower }}"
                     data-phone="{{ r.phone }}">
                   <td class="p-3.5 font-bold text-gray-800">{{ r.name }}</td>
                   <td class="p-3.5 text-gray-600 text-xs">{{ r.email }}</td>
+                  <td class="p-3.5 text-blue-700 font-medium text-xs">{{ r.email_pathdemy }}</td>
                   <td class="p-3.5 text-gray-600 text-xs">{{ r.phone }}</td>
                   <td class="p-3.5 text-xs text-gray-700 max-w-xs break-words bg-orange-50/40 rounded-lg">
                     {{ r.reason }}
@@ -116,7 +116,6 @@
               </tbody>
             </table>
           </div>
-          <!-- 搜尋無結果提示 -->
           <div id="noResultMsg" class="hidden py-8 text-center text-gray-400 text-xs">
             查無符合篩選條件的請假學員資料。
           </div>
@@ -127,7 +126,6 @@
   </div>
 
   <script>
-    // 複合查詢即時過濾 (姓名、Email、聯絡電話)
     function applyFilter() {
       const nameKeyword = document.getElementById('filterName').value.trim().toLowerCase();
       const emailKeyword = document.getElementById('filterEmail').value.trim().toLowerCase();
@@ -139,11 +137,11 @@
       rows.forEach(row => {
         const rowName = row.getAttribute('data-name') || '';
         const rowEmail = row.getAttribute('data-email') || '';
+        const rowPathdemy = row.getAttribute('data-pathdemy') || '';
         const rowPhone = row.getAttribute('data-phone') || '';
 
-        // 複合 AND 條件匹配
         const matchName = !nameKeyword || rowName.includes(nameKeyword);
-        const matchEmail = !emailKeyword || rowEmail.includes(emailKeyword);
+        const matchEmail = !emailKeyword || rowEmail.includes(emailKeyword) || rowPathdemy.includes(emailKeyword);
         const matchPhone = !phoneKeyword || rowPhone.includes(phoneKeyword);
 
         if (matchName && matchEmail && matchPhone) {
@@ -154,11 +152,9 @@
         }
       });
 
-      // 更新符合條件之計數
       const countEl = document.getElementById('filteredCount');
       if (countEl) countEl.innerText = visibleCount;
 
-      // 無符合資料提示
       const noResult = document.getElementById('noResultMsg');
       if (noResult) {
         if (visibleCount === 0 && rows.length > 0) {
@@ -169,7 +165,6 @@
       }
     }
 
-    // 重設所有篩選條件
     function resetFilters() {
       document.getElementById('filterName').value = '';
       document.getElementById('filterEmail').value = '';
@@ -177,7 +172,6 @@
       applyFilter();
     }
 
-    // 取消請假功能 (刪除請假紀錄)
     async function cancelLeave(courseId, studentId, studentName) {
       if (!confirm(`確定要取消學員【${studentName}】的請假申請嗎？\n取消後該學員在該堂課將恢復為正常未簽到狀態。`)) {
         return;

@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SECRET_KEY = os.getenv("SECRET_KEY", "ipuregreen-blia-secret-key-2026")
 
-# 記憶體資料庫
+# 資料庫模型 (統一命名: email_pathdemy)
 db = {
     "admins": [
         {
@@ -37,7 +37,13 @@ db = {
         }
     ],
     "students": [
-        {"id": 1, "name": "黃雅筠", "email": "vinnyhuang.ipuregreen@gmail.com", "phone": "0912345678"}
+        {
+            "id": 1, 
+            "name": "黃雅筠", 
+            "email": "vinnyhuang.ipuregreen@gmail.com", 
+            "email_pathdemy": "vinnyhuang.ipuregreen@gmail.com",
+            "phone": "0912345678"
+        }
     ],
     "courses": [
         {
@@ -143,7 +149,9 @@ async def student_logout():
 
 @app.post("/api/auth/login")
 async def api_login(email: str = Form(...), phone: str = Form(...)):
-    student = next((s for s in db["students"] if s["email"].strip().lower() == email.strip().lower() and s["phone"].strip() == phone.strip()), None)
+    clean_email = email.strip().lower()
+    clean_phone = phone.strip()
+    student = next((s for s in db["students"] if (s["email"].strip().lower() == clean_email or s.get("email_pathdemy", "").strip().lower() == clean_email) and s["phone"].strip() == clean_phone), None)
     if not student:
         return JSONResponse(status_code=401, content={"error": "查無此報名資料，請確認 Email 與電話！"})
     
@@ -284,6 +292,7 @@ async def course_attendance_page(course_id: int, request: Request):
             "id": s["id"],
             "name": s["name"],
             "email": s["email"],
+            "email_pathdemy": s.get("email_pathdemy", s["email"]),
             "phone": s["phone"],
             "status": status,
             "signed_at": signed_at
@@ -319,6 +328,7 @@ async def course_leaves_page(course_id: int, request: Request):
                 "student_id": s["id"],
                 "name": s["name"],
                 "email": s["email"],
+                "email_pathdemy": s.get("email_pathdemy", s["email"]),
                 "phone": s["phone"],
                 "reason": rec.get("reason", "未填寫"),
                 "updated_at": rec.get("updated_at", "-")
@@ -334,7 +344,6 @@ async def course_leaves_page(course_id: int, request: Request):
         }
     )
 
-# 取消請假 API
 @app.delete("/api/admin/courses/{course_id}/leaves/{student_id}")
 async def cancel_leave(course_id: int, student_id: int, request: Request):
     if not get_current_admin(request):
@@ -345,12 +354,11 @@ async def cancel_leave(course_id: int, student_id: int, request: Request):
     return {"success": True}
 
 # ==========================================
-# 核心新增：【補課狀況】頁面與 API
+# 核心需求：【補課狀況】對應渲染 course_pathdemy.html
 # ==========================================
-
-# 1. 課程補課狀況頁面
+@app.get("/admin/courses/{course_id}/pathdemy", response_class=HTMLResponse)
 @app.get("/admin/courses/{course_id}/makeups", response_class=HTMLResponse)
-async def course_makeups_page(course_id: int, request: Request):
+async def course_pathdemy_page(course_id: int, request: Request):
     if not get_current_admin(request):
         return RedirectResponse(url="/admin/login", status_code=302)
     course = next((c for c in db["courses"] if c["id"] == course_id), None)
@@ -366,13 +374,14 @@ async def course_makeups_page(course_id: int, request: Request):
                 "id": s["id"],
                 "name": s["name"],
                 "email": s["email"],
+                "email_pathdemy": s.get("email_pathdemy", s["email"]),
                 "phone": s["phone"],
                 "makeup_date": rec.get("makeup_date", "-")
             })
 
     return templates.TemplateResponse(
         request=request,
-        name="course_makeups.html",
+        name="course_pathdemy.html",
         context={
             "course": course,
             "records": makeup_records,
@@ -381,7 +390,7 @@ async def course_makeups_page(course_id: int, request: Request):
         }
     )
 
-# 2. 登記學員補課 API
+@app.post("/api/admin/courses/{course_id}/pathdemy")
 @app.post("/api/admin/courses/{course_id}/makeups")
 async def add_makeup_record(course_id: int, request: Request):
     if not get_current_admin(request):
@@ -401,7 +410,7 @@ async def add_makeup_record(course_id: int, request: Request):
     }
     return {"success": True}
 
-# 3. 取消補課 API (刪除該筆補課紀錄)
+@app.delete("/api/admin/courses/{course_id}/pathdemy/{student_id}")
 @app.delete("/api/admin/courses/{course_id}/makeups/{student_id}")
 async def cancel_makeup(course_id: int, student_id: int, request: Request):
     if not get_current_admin(request):
@@ -412,7 +421,7 @@ async def cancel_makeup(course_id: int, student_id: int, request: Request):
     return {"success": True}
 
 # ==========================================
-# 管理者帳號維護 API (CRUD)
+# 管理者帳號維護 API
 # ==========================================
 @app.post("/api/admin/accounts")
 async def add_admin_account(request: Request):
@@ -454,8 +463,97 @@ async def delete_admin_account(account_id: int, request: Request):
     return {"success": True}
 
 # ==========================================
-# 課程與學員 匯入/CRUD API
+# 學員 CRUD API (全面支援 email_pathdemy)
 # ==========================================
+@app.post("/api/admin/students")
+async def add_student(request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
+    data = await request.json()
+    new_id = max([s["id"] for s in db["students"]], default=0) + 1
+    email = data.get("email", "").strip()
+    email_pathdemy = data.get("email_pathdemy", "").strip() or email
+    new_student = {
+        "id": new_id, 
+        "name": data.get("name", "").strip(), 
+        "email": email, 
+        "email_pathdemy": email_pathdemy,
+        "phone": data.get("phone", "").strip()
+    }
+    db["students"].append(new_student)
+    return {"success": True, "student": new_student}
+
+@app.put("/api/admin/students/{student_id}")
+async def update_student(student_id: int, request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
+    data = await request.json()
+    for s in db["students"]:
+        if s["id"] == student_id:
+            s["name"] = data.get("name", s["name"]).strip()
+            s["email"] = data.get("email", s["email"]).strip()
+            s["email_pathdemy"] = data.get("email_pathdemy", s.get("email_pathdemy", s["email"])).strip()
+            s["phone"] = data.get("phone", s["phone"]).strip()
+            return {"success": True, "student": s}
+    raise HTTPException(status_code=404, detail="查無此學員")
+
+@app.delete("/api/admin/students/{student_id}")
+async def delete_student(student_id: int, request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
+    db["students"] = [s for s in db["students"] if s["id"] != student_id]
+    return {"success": True}
+
+@app.post("/api/admin/students/import")
+async def import_students(request: Request, file: UploadFile = File(...)):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
+    contents = await file.read()
+    filename = file.filename.lower()
+    imported_count = 0
+    rows = []
+
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        sheet = wb.active
+        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
+    elif filename.endswith(".csv"):
+        text = contents.decode("utf-8-sig", errors="ignore")
+        rows = list(csv.reader(io.StringIO(text)))
+    else:
+        raise HTTPException(status_code=400, detail="請上傳 .xlsx 或 .csv 檔案")
+
+    def cell_to_str(val): return str(val).strip() if val is not None else ""
+
+    for r in rows[1:]:
+        row_vals = [cell_to_str(x) for x in r]
+        if len(row_vals) < 3 or not row_vals[0]: continue
+        
+        # 欄位順序：姓名, Email, Email(補課平台), 電話
+        if len(row_vals) >= 4:
+            name, email, email_pathdemy, phone = row_vals[:4]
+        else:
+            name, email, phone = row_vals[:3]
+            email_pathdemy = email
+            
+        if not email_pathdemy:
+            email_pathdemy = email
+
+        existing = next((s for s in db["students"] if s["email"].lower() == email.lower()), None)
+        if existing:
+            existing["name"] = name
+            existing["email_pathdemy"] = email_pathdemy
+            existing["phone"] = phone
+        else:
+            new_id = max([s["id"] for s in db["students"]], default=0) + 1
+            db["students"].append({
+                "id": new_id, 
+                "name": name, 
+                "email": email, 
+                "email_pathdemy": email_pathdemy, 
+                "phone": phone
+            })
+        imported_count += 1
+
+    return {"success": True, "count": imported_count}
+
+# 課程 CRUD 與匯入 API
 @app.post("/api/admin/courses/import")
 async def import_courses(request: Request, file: UploadFile = File(...)):
     if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
@@ -466,7 +564,8 @@ async def import_courses(request: Request, file: UploadFile = File(...)):
 
     if filename.endswith(".xlsx") or filename.endswith(".xls"):
         wb = openpyxl.load_workbook(io.BytesIO(contents))
-        rows = list(sheet.iter_rows(values_only=True)) if (sheet := wb.active) else []
+        sheet = wb.active
+        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
     elif filename.endswith(".csv"):
         text = contents.decode("utf-8-sig", errors="ignore")
         rows = list(csv.reader(io.StringIO(text)))
@@ -498,67 +597,6 @@ async def import_courses(request: Request, file: UploadFile = File(...)):
         imported_count += 1
 
     return {"success": True, "count": imported_count}
-
-@app.post("/api/admin/students/import")
-async def import_students(request: Request, file: UploadFile = File(...)):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    contents = await file.read()
-    filename = file.filename.lower()
-    imported_count = 0
-    rows = []
-
-    if filename.endswith(".xlsx") or filename.endswith(".xls"):
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
-        rows = list(sheet.iter_rows(values_only=True)) if (sheet := wb.active) else []
-    elif filename.endswith(".csv"):
-        text = contents.decode("utf-8-sig", errors="ignore")
-        rows = list(csv.reader(io.StringIO(text)))
-    else:
-        raise HTTPException(status_code=400, detail="請上傳 .xlsx 或 .csv 檔案")
-
-    def cell_to_str(val): return str(val).strip() if val is not None else ""
-
-    for r in rows[1:]:
-        row_vals = [cell_to_str(x) for x in r]
-        if len(row_vals) < 3 or not row_vals[0]: continue
-        name, email, phone = row_vals[:3]
-        existing = next((s for s in db["students"] if s["email"].lower() == email.lower()), None)
-        if existing:
-            existing["name"] = name
-            existing["phone"] = phone
-        else:
-            new_id = max([s["id"] for s in db["students"]], default=0) + 1
-            db["students"].append({"id": new_id, "name": name, "email": email, "phone": phone})
-        imported_count += 1
-
-    return {"success": True, "count": imported_count}
-
-@app.post("/api/admin/students")
-async def add_student(request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    new_id = max([s["id"] for s in db["students"]], default=0) + 1
-    new_student = {"id": new_id, "name": data.get("name", "").strip(), "email": data.get("email", "").strip(), "phone": data.get("phone", "").strip()}
-    db["students"].append(new_student)
-    return {"success": True, "student": new_student}
-
-@app.put("/api/admin/students/{student_id}")
-async def update_student(student_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    for s in db["students"]:
-        if s["id"] == student_id:
-            s["name"] = data.get("name", s["name"]).strip()
-            s["email"] = data.get("email", s["email"]).strip()
-            s["phone"] = data.get("phone", s["phone"]).strip()
-            return {"success": True, "student": s}
-    raise HTTPException(status_code=404, detail="查無此學員")
-
-@app.delete("/api/admin/students/{student_id}")
-async def delete_student(student_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    db["students"] = [s for s in db["students"] if s["id"] != student_id]
-    return {"success": True}
 
 @app.post("/api/admin/courses")
 async def add_course(request: Request):
