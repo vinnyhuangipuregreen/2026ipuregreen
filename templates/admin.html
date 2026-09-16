@@ -4,6 +4,58 @@
   <meta charset="UTF-8">
   <title>「BLIA佛光永續學院」後台管理系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 核心修復：優先載入選單切換邏輯，確保點擊必能觸發 -->
+  <script>
+    function switchTab(tabId) {
+      // 1. 精準切換右側 3 個區塊的顯示狀態 (不依賴 class，最穩定)
+      const panels = {
+        'admins': document.getElementById('panel-admins'),
+        'students': document.getElementById('panel-students'),
+        'courses': document.getElementById('panel-courses')
+      };
+
+      for (const key in panels) {
+        if (panels[key]) {
+          panels[key].style.display = (key === tabId) ? 'block' : 'none';
+        }
+      }
+
+      // 2. 切換左側 3 個選單按鈕的樣式 (高亮選中項呈現黃底，如附圖)
+      const tabs = ['admins', 'students', 'courses'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('tab-btn-' + t);
+        if (!btn) return;
+        if (t === tabId) {
+          // 選中項：黃底、黑字、金黃邊框 (還原附圖視覺)
+          btn.style.backgroundColor = '#FEF08A';
+          btn.style.color = '#1F2937';
+          btn.style.fontWeight = 'bold';
+          btn.style.borderColor = '#FACC15';
+        } else {
+          // 未選中項：透明底、灰字
+          btn.style.backgroundColor = 'transparent';
+          btn.style.color = '#4B5563';
+          btn.style.fontWeight = 'normal';
+          btn.style.borderColor = 'transparent';
+        }
+      });
+
+      // 3. 記憶當前頁籤，重新整理後不遺失
+      try {
+        localStorage.setItem('admin_active_tab', tabId);
+      } catch(e) {}
+    }
+
+    // 頁面載入完成時，自動恢復上次選取的頁籤 (預設為 admins)
+    document.addEventListener('DOMContentLoaded', () => {
+      let savedTab = 'admins';
+      try {
+        savedTab = localStorage.getItem('admin_active_tab') || 'admins';
+      } catch(e) {}
+      switchTab(savedTab);
+    });
+  </script>
 </head>
 <body class="min-h-screen bg-[#F4F6F8] p-4 sm:p-6 text-gray-800">
   <div class="max-w-7xl mx-auto space-y-6">
@@ -21,7 +73,7 @@
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <button onclick="openChangePwdModal()" class="px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-xl hover:bg-gray-50 transition">
+        <button type="button" onclick="openChangePwdModal()" class="px-3 py-1.5 border border-gray-200 text-xs font-medium text-gray-700 rounded-xl hover:bg-gray-50 transition">
           🔑 修改個人密碼
         </button>
         <a href="/api/admin/auth/logout" class="px-3 py-1.5 border border-red-200 text-xs font-medium text-red-600 rounded-xl hover:bg-red-50 transition">
@@ -33,35 +85,43 @@
     <!-- 主架構：左邊 [選單] + 右邊 [維護內容] -->
     <div class="flex flex-col md:flex-row gap-6 items-start">
 
-      <!-- 左側：選單 -->
+      <!-- ============================================== -->
+      <!-- 左側：選單 (Sidebar Menu) -->
+      <!-- ============================================== -->
       <aside class="w-full md:w-64 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 shrink-0">
         <div class="text-center pb-3 mb-2 border-b border-gray-100">
           <h2 class="text-xl font-bold text-gray-800 tracking-wider">選單</h2>
         </div>
         
         <nav class="space-y-1.5">
+          <!-- 功能 1：管理者帳號維護 -->
           <button 
+            type="button"
             id="tab-btn-admins" 
             onclick="switchTab('admins')" 
-            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between"
+            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between border cursor-pointer"
           >
             <span>🛡️ 管理者帳號維護</span>
             <span class="text-xs text-gray-400">›</span>
           </button>
 
+          <!-- 功能 2：學員名單維護 -->
           <button 
+            type="button"
             id="tab-btn-students" 
             onclick="switchTab('students')" 
-            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between"
+            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between border cursor-pointer"
           >
             <span>👥 學員名單維護</span>
             <span class="text-xs text-gray-400">›</span>
           </button>
 
+          <!-- 功能 3：課程清單維護 -->
           <button 
+            type="button"
             id="tab-btn-courses" 
             onclick="switchTab('courses')" 
-            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between"
+            class="w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between border cursor-pointer"
           >
             <span>📚 課程清單維護</span>
             <span class="text-xs text-gray-400">›</span>
@@ -69,7 +129,9 @@
         </nav>
       </aside>
 
+      <!-- ============================================== -->
       <!-- 右側：維護內容顯示區域 -->
+      <!-- ============================================== -->
       <main class="flex-1 w-full min-w-0">
 
         <!-- 內容 1：管理者帳號維護 -->
@@ -83,7 +145,7 @@
               </h2>
               <p class="text-xs text-gray-400 mt-0.5">維護後台登入帳號、密碼與狀態。最高權限帳號不可刪除。</p>
             </div>
-            <button onclick="openAdminModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
+            <button type="button" onclick="openAdminModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
               + 新增管理者
             </button>
           </div>
@@ -119,11 +181,20 @@
                     {% endif %}
                   </td>
                   <td class="p-3.5 text-right space-x-2">
-                    <button onclick="editAdmin({{ a.id }}, '{{ a.email }}', '{{ a.password }}', '{{ a.status }}', '{{ a.role }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
+                    <button type="button"
+                      data-id="{{ a.id }}"
+                      data-email="{{ a.email }}"
+                      data-password="{{ a.password }}"
+                      data-status="{{ a.status }}"
+                      data-role="{{ a.role }}"
+                      onclick="handleEditAdmin(this)"
+                      class="text-xs text-[#3B7A57] hover:underline font-medium">
+                      修改
+                    </button>
                     {% if a.email == 'service@ipuregreen.org' or a.role == 'superadmin' %}
                       <span class="text-xs text-gray-300 cursor-not-allowed">不可刪除</span>
                     {% else %}
-                      <button onclick="deleteAdmin({{ a.id }}, '{{ a.email }}')" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+                      <button type="button" onclick="deleteAdmin({{ a.id }}, '{{ a.email }}')" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
                     {% endif %}
                   </td>
                 </tr>
@@ -134,7 +205,7 @@
         </div>
 
         <!-- 內容 2：學員名單維護 -->
-        <div id="panel-students" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+        <div id="panel-students" style="display:none;" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
@@ -148,7 +219,7 @@
                 <span>📥 匯入 Excel/CSV</span>
                 <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadStudentExcel(event)">
               </label>
-              <button onclick="openStudentModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
+              <button type="button" onclick="openStudentModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
                 + 新增學員
               </button>
             </div>
@@ -173,8 +244,16 @@
                   <td class="p-3.5 text-gray-600">{{ s.email }}</td>
                   <td class="p-3.5 text-gray-600">{{ s.phone }}</td>
                   <td class="p-3.5 text-right space-x-2">
-                    <button onclick="editStudent({{ s.id }}, '{{ s.name }}', '{{ s.email }}', '{{ s.phone }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
-                    <button onclick="deleteStudent({{ s.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+                    <button type="button"
+                      data-id="{{ s.id }}"
+                      data-name="{{ s.name }}"
+                      data-email="{{ s.email }}"
+                      data-phone="{{ s.phone }}"
+                      onclick="handleEditStudent(this)"
+                      class="text-xs text-[#3B7A57] hover:underline font-medium">
+                      修改
+                    </button>
+                    <button type="button" onclick="deleteStudent({{ s.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
                   </td>
                 </tr>
                 {% endfor %}
@@ -183,8 +262,8 @@
           </div>
         </div>
 
-        <!-- 內容 3：課程清單維護 (含簽到、請假、補課狀況按鈕) -->
-        <div id="panel-courses" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+        <!-- 內容 3：課程清單維護 -->
+        <div id="panel-courses" style="display:none;" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
@@ -198,7 +277,7 @@
                 <span>📥 匯入 Excel/CSV</span>
                 <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadCourseExcel(event)">
               </label>
-              <button onclick="openCourseModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
+              <button type="button" onclick="openCourseModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-xs font-medium rounded-xl shadow-sm transition">
                 + 新增課程
               </button>
             </div>
@@ -210,7 +289,7 @@
               <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <h3 class="font-bold text-gray-800 text-base">{{ c.title }}</h3>
 
-                <!-- 核心需求：[簽到狀況] -> [請假狀況] -> [補課狀況] (藍字淺藍底) -->
+                <!-- 操作按鈕群：簽到、請假、補課、修改、刪除 -->
                 <div class="flex items-center gap-2">
                   <a href="/admin/courses/{{ c.id }}/attendance" class="px-3 py-1.5 bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#2E7D32] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
                     📊 簽到狀況
@@ -221,8 +300,17 @@
                   <a href="/admin/courses/{{ c.id }}/makeups" class="px-3 py-1.5 bg-[#E3F2FD] hover:bg-[#BBDEFB] text-[#1565C0] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
                     🎓 補課狀況
                   </a>
-                  <button onclick="editCourse({{ c.id }}, '{{ c.title }}', '{{ c.course_date }}', '{{ c.course_time }}', '{{ c.open_time }}')" class="text-xs text-[#3B7A57] hover:underline font-medium ml-1">修改</button>
-                  <button onclick="deleteCourse({{ c.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
+                  <button type="button"
+                    data-id="{{ c.id }}"
+                    data-title="{{ c.title }}"
+                    data-date="{{ c.course_date }}"
+                    data-time="{{ c.course_time }}"
+                    data-open="{{ c.open_time }}"
+                    onclick="handleEditCourse(this)"
+                    class="text-xs text-[#3B7A57] hover:underline font-medium ml-1">
+                    修改
+                  </button>
+                  <button type="button" onclick="deleteCourse({{ c.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
                 </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-[#F8F9FA] p-3 rounded-xl text-xs text-gray-600">
@@ -239,7 +327,11 @@
     </div>
   </div>
 
-  <!-- 彈窗群 -->
+  <!-- ============================================== -->
+  <!-- 彈窗群 (Modal) -->
+  <!-- ============================================== -->
+
+  <!-- 管理者帳號 Modal -->
   <div id="adminModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-lg space-y-4">
       <h3 id="adminModalTitle" class="text-lg font-bold text-gray-800">新增管理者帳號</h3>
@@ -264,12 +356,13 @@
         </div>
       </div>
       <div class="flex justify-end gap-2 pt-2">
-        <button onclick="closeAdminModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
-        <button onclick="saveAdminAccount()" class="px-4 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl">儲存</button>
+        <button type="button" onclick="closeAdminModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+        <button type="button" onclick="saveAdminAccount()" class="px-4 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl">儲存</button>
       </div>
     </div>
   </div>
 
+  <!-- 修改密碼 Modal -->
   <div id="pwdModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-lg space-y-4">
       <h3 class="text-lg font-bold text-gray-800">修改個人密碼</h3>
@@ -286,12 +379,13 @@
         </div>
       </div>
       <div class="flex justify-end gap-2 pt-2">
-        <button onclick="closeChangePwdModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
-        <button onclick="saveNewPassword()" class="px-4 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl">確認修改</button>
+        <button type="button" onclick="closeChangePwdModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+        <button type="button" onclick="saveNewPassword()" class="px-4 py-2 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl">確認修改</button>
       </div>
     </div>
   </div>
 
+  <!-- 學員 Modal -->
   <div id="studentModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-lg space-y-4">
       <h3 id="studentModalTitle" class="text-lg font-bold text-gray-800">新增學員</h3>
@@ -302,12 +396,13 @@
         <input type="tel" id="modalStudentPhone" placeholder="學員聯絡電話" class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
       </div>
       <div class="flex justify-end gap-2 pt-2">
-        <button onclick="closeStudentModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
-        <button onclick="saveStudent()" class="px-4 py-2 bg-[#3B7A57] text-white text-sm font-medium rounded-xl">儲存</button>
+        <button type="button" onclick="closeStudentModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+        <button type="button" onclick="saveStudent()" class="px-4 py-2 bg-[#3B7A57] text-white text-sm font-medium rounded-xl">儲存</button>
       </div>
     </div>
   </div>
 
+  <!-- 課程 Modal -->
   <div id="courseModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl p-6 w-full max-w-lg shadow-lg space-y-4">
       <h3 id="courseModalTitle" class="text-lg font-bold text-gray-800">新增課程</h3>
@@ -321,52 +416,21 @@
         <input type="text" id="modalCourseOpenTime" placeholder="2026-09-15 18:00:00" class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
       </div>
       <div class="flex justify-end gap-2 pt-2">
-        <button onclick="closeCourseModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
-        <button onclick="saveCourse()" class="px-4 py-2 bg-[#3B7A57] text-white text-sm font-medium rounded-xl">儲存</button>
+        <button type="button" onclick="closeCourseModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+        <button type="button" onclick="saveCourse()" class="px-4 py-2 bg-[#3B7A57] text-white text-sm font-medium rounded-xl">儲存</button>
       </div>
     </div>
   </div>
 
   <script>
-    function switchTab(tabId) {
-      document.getElementById('panel-admins').classList.add('hidden');
-      document.getElementById('panel-students').classList.add('hidden');
-      document.getElementById('panel-courses').classList.add('hidden');
+    // ===== 管理者操作 (透過 data 屬性安全觸發，不被特殊字元中斷) =====
+    function handleEditAdmin(btn) {
+      const id = btn.getAttribute('data-id');
+      const email = btn.getAttribute('data-email');
+      const password = btn.getAttribute('data-password');
+      const status = btn.getAttribute('data-status');
+      const role = btn.getAttribute('data-role');
 
-      const tabs = ['admins', 'students', 'courses'];
-      tabs.forEach(t => {
-        const btn = document.getElementById('tab-btn-' + t);
-        btn.className = "w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between text-gray-600 hover:bg-gray-50";
-      });
-
-      const targetPanel = document.getElementById('panel-' + tabId);
-      if (targetPanel) targetPanel.classList.remove('hidden');
-
-      const activeBtn = document.getElementById('tab-btn-' + tabId);
-      if (activeBtn) {
-        activeBtn.className = "w-full text-left px-4 py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-between bg-yellow-200/90 text-gray-900 border border-yellow-300 shadow-xs";
-      }
-
-      localStorage.setItem('admin_current_tab', tabId);
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      const savedTab = localStorage.getItem('admin_current_tab') || 'courses';
-      switchTab(savedTab);
-    });
-
-    function openAdminModal() {
-      document.getElementById('modalAdminId').value = '';
-      document.getElementById('modalAdminEmail').value = '';
-      document.getElementById('modalAdminEmail').disabled = false;
-      document.getElementById('modalAdminPassword').value = '';
-      document.getElementById('modalAdminStatus').value = 'active';
-      document.getElementById('modalAdminStatus').disabled = false;
-      document.getElementById('adminModalTitle').innerText = '新增管理者帳號';
-      document.getElementById('adminModal').classList.remove('hidden');
-    }
-    function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); }
-    function editAdmin(id, email, password, status, role) {
       document.getElementById('modalAdminId').value = id;
       document.getElementById('modalAdminEmail').value = email;
       document.getElementById('modalAdminPassword').value = password;
@@ -382,6 +446,19 @@
       }
       document.getElementById('adminModal').classList.remove('hidden');
     }
+
+    function openAdminModal() {
+      document.getElementById('modalAdminId').value = '';
+      document.getElementById('modalAdminEmail').value = '';
+      document.getElementById('modalAdminEmail').disabled = false;
+      document.getElementById('modalAdminPassword').value = '';
+      document.getElementById('modalAdminStatus').value = 'active';
+      document.getElementById('modalAdminStatus').disabled = false;
+      document.getElementById('adminModalTitle').innerText = '新增管理者帳號';
+      document.getElementById('adminModal').classList.remove('hidden');
+    }
+    function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); }
+
     async function saveAdminAccount() {
       const id = document.getElementById('modalAdminId').value;
       const email = document.getElementById('modalAdminEmail').value.trim();
@@ -396,11 +473,13 @@
       else alert(data.error || '儲存失敗');
     }
     async function deleteAdmin(id, email) {
-      if (!confirm(`確定要刪除管理者帳號 [${email}] 嗎？`)) return;       const res = await fetch(`/api/admin/accounts/${id}`, { method: 'DELETE' });
+      if (!confirm(`確定要刪除管理者帳號 [${email}] 嗎？`)) return;
+      const res = await fetch(`/api/admin/accounts/${id}`, { method: 'DELETE' });
       if (res.ok) location.reload();
       else alert('刪除失敗');
     }
 
+    // ===== 修改個人密碼 =====
     function openChangePwdModal() { document.getElementById('pwdModal').classList.remove('hidden'); }
     function closeChangePwdModal() { document.getElementById('pwdModal').classList.add('hidden'); }
     async function saveNewPassword() {
@@ -413,6 +492,21 @@
       else alert(data.error);
     }
 
+    // ===== 學員操作 =====
+    function handleEditStudent(btn) {
+      const id = btn.getAttribute('data-id');
+      const name = btn.getAttribute('data-name');
+      const email = btn.getAttribute('data-email');
+      const phone = btn.getAttribute('data-phone');
+
+      document.getElementById('modalStudentId').value = id;
+      document.getElementById('modalStudentName').value = name;
+      document.getElementById('modalStudentEmail').value = email;
+      document.getElementById('modalStudentPhone').value = phone;
+      document.getElementById('studentModalTitle').innerText = '修改學員資料';
+      document.getElementById('studentModal').classList.remove('hidden');
+    }
+
     function openStudentModal() {
       document.getElementById('modalStudentId').value = '';
       document.getElementById('modalStudentName').value = '';
@@ -422,21 +516,21 @@
       document.getElementById('studentModal').classList.remove('hidden');
     }
     function closeStudentModal() { document.getElementById('studentModal').classList.add('hidden'); }
-    function editStudent(id, name, email, phone) {
-      document.getElementById('modalStudentId').value = id;
-      document.getElementById('modalStudentName').value = name;
-      document.getElementById('modalStudentEmail').value = email;
-      document.getElementById('modalStudentPhone').value = phone;
-      document.getElementById('studentModalTitle').innerText = '修改學員資料';
-      document.getElementById('studentModal').classList.remove('hidden');
-    }
+
     async function saveStudent() {
       const id = document.getElementById('modalStudentId').value;
       const name = document.getElementById('modalStudentName').value.trim();
       const email = document.getElementById('modalStudentEmail').value.trim();
       const phone = document.getElementById('modalStudentPhone').value.trim();
       if (!name || !email || !phone) return alert('請填寫完整！');
-      const url = id ? `/api/admin/students/${id}` : '/api/admin/students';       const method = id ? 'PUT' : 'POST';       const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, email, phone }) });       if (res.ok) location.reload();     }     async function deleteStudent(id) {       if (!confirm('確定刪除此學員？')) return;       const res = await fetch(`/api/admin/students/${id}`, { method: 'DELETE' });
+      const url = id ? `/api/admin/students/${id}` : '/api/admin/students';
+      const method = id ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, email, phone }) });
+      if (res.ok) location.reload();
+    }
+    async function deleteStudent(id) {
+      if (!confirm('確定刪除此學員？')) return;
+      const res = await fetch(`/api/admin/students/${id}`, { method: 'DELETE' });
       if (res.ok) location.reload();
     }
     async function uploadStudentExcel(e) {
@@ -446,14 +540,63 @@
       formData.append('file', file);
       const res = await fetch('/api/admin/students/import', { method: 'POST', body: formData });
       const data = await res.json();
-      if (res.ok) { alert(`成功匯入 ${data.count} 筆學員資料！`); location.reload(); }       else alert('匯入失敗');     }      function openCourseModal() {       document.getElementById('modalCourseId').value = '';       document.getElementById('modalCourseTitle').value = '';       document.getElementById('modalCourseDate').value = '';       document.getElementById('modalCourseTime').value = '';       document.getElementById('modalCourseOpenTime').value = '';       document.getElementById('courseModalTitle').innerText = '新增課程';       document.getElementById('courseModal').classList.remove('hidden');     }     function closeCourseModal() { document.getElementById('courseModal').classList.add('hidden'); }     function editCourse(id, title, cdate, ctime, otime) {       document.getElementById('modalCourseId').value = id;       document.getElementById('modalCourseTitle').value = title;       document.getElementById('modalCourseDate').value = cdate;       document.getElementById('modalCourseTime').value = ctime;       document.getElementById('modalCourseOpenTime').value = otime;       document.getElementById('courseModalTitle').innerText = '修改課程資料';       document.getElementById('courseModal').classList.remove('hidden');     }     async function saveCourse() {       const id = document.getElementById('modalCourseId').value;       const title = document.getElementById('modalCourseTitle').value.trim();       const course_date = document.getElementById('modalCourseDate').value.trim();       const course_time = document.getElementById('modalCourseTime').value.trim();       const open_time = document.getElementById('modalCourseOpenTime').value.trim();       if (!title \vert{}\vert{} !course_date \vert{}\vert{} !course_time \vert{}\vert{} !open_time) return alert('請填寫完整！');       const url = id ? `/api/admin/courses/${id}` : '/api/admin/courses';
+      if (res.ok) { alert(`成功匯入 ${data.count} 筆學員資料！`); location.reload(); }
+      else alert('匯入失敗');
+    }
+
+    // ===== 課程操作 =====
+    function handleEditCourse(btn) {
+      const id = btn.getAttribute('data-id');
+      const title = btn.getAttribute('data-title');
+      const cdate = btn.getAttribute('data-date');
+      const ctime = btn.getAttribute('data-time');
+      const otime = btn.getAttribute('data-open');
+
+      document.getElementById('modalCourseId').value = id;
+      document.getElementById('modalCourseTitle').value = title;
+      document.getElementById('modalCourseDate').value = cdate;
+      document.getElementById('modalCourseTime').value = ctime;
+      document.getElementById('modalCourseOpenTime').value = otime;
+      document.getElementById('courseModalTitle').innerText = '修改課程資料';
+      document.getElementById('courseModal').classList.remove('hidden');
+    }
+
+    function openCourseModal() {
+      document.getElementById('modalCourseId').value = '';
+      document.getElementById('modalCourseTitle').value = '';
+      document.getElementById('modalCourseDate').value = '';
+      document.getElementById('modalCourseTime').value = '';
+      document.getElementById('modalCourseOpenTime').value = '';
+      document.getElementById('courseModalTitle').innerText = '新增課程';
+      document.getElementById('courseModal').classList.remove('hidden');
+    }
+    function closeCourseModal() { document.getElementById('courseModal').classList.add('hidden'); }
+
+    async function saveCourse() {
+      const id = document.getElementById('modalCourseId').value;
+      const title = document.getElementById('modalCourseTitle').value.trim();
+      const course_date = document.getElementById('modalCourseDate').value.trim();
+      const course_time = document.getElementById('modalCourseTime').value.trim();
+      const open_time = document.getElementById('modalCourseOpenTime').value.trim();
+      if (!title || !course_date || !course_time || !open_time) return alert('請填寫完整！');
+      const url = id ? `/api/admin/courses/${id}` : '/api/admin/courses';
       const method = id ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ title, course_date, course_time, open_time }) });
       if (res.ok) location.reload();
     }
     async function deleteCourse(id) {
       if (!confirm('確定刪除此課程？')) return;
-      const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });       if (res.ok) location.reload();     }     async function uploadCourseExcel(e) {       const file = e.target.files[0];       if (!file) return;       const formData = new FormData();       formData.append('file', file);       const res = await fetch('/api/admin/courses/import', { method: 'POST', body: formData });       const data = await res.json();       if (res.ok) { alert(`成功匯入 ${data.count} 筆課程！`); location.reload(); }
+      const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
+      if (res.ok) location.reload();
+    }
+    async function uploadCourseExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/admin/courses/import', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) { alert(`成功匯入 ${data.count} 筆課程！`); location.reload(); }
       else alert(data.detail || '匯入失敗');
     }
   </script>
