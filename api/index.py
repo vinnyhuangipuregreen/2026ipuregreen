@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SECRET_KEY = os.getenv("SECRET_KEY", "ipuregreen-blia-secret-key-2026")
 
-# 資料庫預設資料
+# 記憶體資料庫
 db = {
     "admins": [
         {
@@ -85,7 +85,7 @@ def get_current_admin(request: Request):
     return None
 
 # ==========================================
-# 前台學員頁面與登入/登出 (秒退登出)
+# 前台學員路由
 # ==========================================
 @app.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -182,9 +182,8 @@ async def api_leave(request: Request):
     return {"success": True}
 
 # ==========================================
-# 後台管理：登入 / 修改密碼 / 忘記密碼 / 帳號維護
+# 後台管理路由 (登入、密碼、檢視)
 # ==========================================
-
 @app.get("/admin/login", response_class=HTMLResponse)
 async def admin_login_page(request: Request):
     if get_current_admin(request):
@@ -241,7 +240,6 @@ async def forgot_password(request: Request):
         }
     return JSONResponse(status_code=404, content={"error": "查無此管理者 Email，請確認輸入是否正確！"})
 
-# 後台主頁
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     current_admin = get_current_admin(request)
@@ -258,7 +256,7 @@ async def admin_page(request: Request):
         }
     )
 
-# 課程學員簽到狀況頁面 (含圓餅圖)
+# 課程學員簽到狀況頁面
 @app.get("/admin/courses/{course_id}/attendance", response_class=HTMLResponse)
 async def course_attendance_page(course_id: int, request: Request):
     if not get_current_admin(request):
@@ -303,6 +301,52 @@ async def course_attendance_page(course_id: int, request: Request):
             "total_count": len(student_records)
         }
     )
+
+# 課程學員請假狀況頁面
+@app.get("/admin/courses/{course_id}/leaves", response_class=HTMLResponse)
+async def course_leaves_page(course_id: int, request: Request):
+    if not get_current_admin(request):
+        return RedirectResponse(url="/admin/login", status_code=302)
+    
+    course = next((c for c in db["courses"] if c["id"] == course_id), None)
+    if not course:
+        return RedirectResponse(url="/admin", status_code=302)
+    
+    leave_records = []
+    for s in db["students"]:
+        key = f"{s['id']}_{course['id']}"
+        rec = db["attendances"].get(key)
+        if rec and rec.get("status") == "ON_LEAVE":
+            leave_records.append({
+                "student_id": s["id"],
+                "name": s["name"],
+                "email": s["email"],
+                "phone": s["phone"],
+                "reason": rec.get("reason", "未填寫"),
+                "updated_at": rec.get("updated_at", "-")
+            })
+
+    return templates.TemplateResponse(
+        request=request,
+        name="course_leaves.html",
+        context={
+            "course": course,
+            "records": leave_records,
+            "total_count": len(leave_records)
+        }
+    )
+
+# 取消請假 API (刪除該筆請假紀錄)
+@app.delete("/api/admin/courses/{course_id}/leaves/{student_id}")
+async def cancel_leave(course_id: int, student_id: int, request: Request):
+    if not get_current_admin(request):
+        raise HTTPException(status_code=401, detail="未授權")
+    
+    key = f"{student_id}_{course_id}"
+    if key in db["attendances"]:
+        del db["attendances"][key]
+    
+    return {"success": True}
 
 # ==========================================
 # 管理者帳號維護 API (CRUD)
@@ -370,13 +414,10 @@ async def delete_admin_account(account_id: int, request: Request):
     return {"success": True}
 
 # ==========================================
-# 學員與課程 CRUD API (含 Admin 權限驗證與 Excel 正確解構)
+# 課程與學員 匯入/CRUD API
 # ==========================================
-
-# 1. 課程匯入 (核心修復：Admin 專屬 + 精準解構 4 欄位)
 @app.post("/api/admin/courses/import")
 async def import_courses(request: Request, file: UploadFile = File(...)):
-    # 嚴格確認管理者權限
     current_admin = get_current_admin(request)
     if not current_admin:
         raise HTTPException(status_code=401, detail="未授權，匯入功能僅限管理者使用！")
@@ -410,15 +451,11 @@ async def import_courses(request: Request, file: UploadFile = File(...)):
         if len(row_vals) < 4 or not row_vals[0]:
             continue
 
-        # 精準抓取 4 個獨立欄位 (避免整列字串化)
         title, raw_date, raw_time, raw_open = row_vals[:4]
-        
-        # 轉換為標準日期 2026/09/15 (完全符合圖二樣式)
         cdate = raw_date.replace("-", "/").split(" ")[0]
         ctime = raw_time
         otime = raw_open
 
-        # 智慧覆蓋更新已存在之課程，並修復原本破損的資料
         existing = next((c for c in db["courses"] if c["title"].strip() == title), None)
         if existing:
             existing["course_date"] = cdate
@@ -437,7 +474,6 @@ async def import_courses(request: Request, file: UploadFile = File(...)):
 
     return {"success": True, "count": imported_count}
 
-# 2. 學員匯入 (核心修復：Admin 專屬 + 精準解構 3 欄位)
 @app.post("/api/admin/students/import")
 async def import_students(request: Request, file: UploadFile = File(...)):
     current_admin = get_current_admin(request)
@@ -480,7 +516,6 @@ async def import_students(request: Request, file: UploadFile = File(...)):
 
     return {"success": True, "count": imported_count}
 
-# 3. 手動新增/修改/刪除 學員與課程
 @app.post("/api/admin/students")
 async def add_student(request: Request):
     if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")

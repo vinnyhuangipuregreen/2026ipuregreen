@@ -6,7 +6,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen bg-[#F8F9FA] pb-16">
-  <!-- 頂部 Header (圖二) -->
+  <!-- 頂部 Header -->
   <header class="max-w-5xl mx-auto px-4 pt-6 pb-4 flex justify-between items-start">
     <div>
       <span class="text-xs text-[#3B7A57] font-medium">「BLIA佛光永續學院」簽到系統</span>
@@ -17,7 +17,7 @@
   </header>
 
   <main class="max-w-5xl mx-auto px-4 space-y-8">
-    <!-- 四格統計卡片 (圖二) -->
+    <!-- 四格統計卡片 -->
     <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
       <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
         <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.signed }}</div>
@@ -37,7 +37,7 @@
       </div>
     </section>
 
-    <!-- 課程簽到區塊 (圖二) -->
+    <!-- 課程簽到區塊 -->
     <section class="space-y-4">
       <div>
         <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">🎏 課程簽到</h2>
@@ -64,9 +64,12 @@
 
           <p class="text-[11px] text-gray-400">可先請假，簽到需等上課當天</p>
 
+          <!-- 按鈕區塊：已請假時簽到按鈕反灰不可按 -->
           <div class="grid grid-cols-2 gap-3 pt-1">
             {% if course.status == 'SIGNED_IN' %}
               <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl">✓ 已簽到</button>
+            {% elif course.status == 'ON_LEAVE' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">簽到</button>
             {% else %}
               <button onclick="doCheckin({{ course.id }})" class="w-full py-2.5 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl transition">簽到</button>
             {% endif %}
@@ -81,7 +84,7 @@
       </div>
     </section>
 
-    <!-- 已完成紀錄 (圖三) -->
+    <!-- 已完成紀錄 -->
     <section class="space-y-4">
       <div>
         <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">📋 已完成紀錄</h2>
@@ -132,7 +135,6 @@
       if (res.ok) location.reload();
       else alert('請假申請失敗');
     }
-
   </script>
 </body>
 </html>

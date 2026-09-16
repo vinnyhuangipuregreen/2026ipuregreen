@@ -9,7 +9,7 @@
 <body class="min-h-screen bg-[#F4F6F8] p-6 text-gray-800">
   <div class="max-w-6xl mx-auto space-y-6">
 
-    <!-- 頂部資訊卡片 -->
+    <!-- 頂部卡片 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <a href="/admin" class="text-xs text-[#3B7A57] hover:underline font-medium">← 返回後台課程列表</a>
@@ -32,7 +32,7 @@
       </div>
     </div>
 
-    <!-- 核心功能：【複合查詢過濾器】 -->
+    <!-- 複合查詢過濾器 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
       <div class="flex justify-between items-center">
         <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
@@ -46,7 +46,6 @@
         </button>
       </div>
 
-      <!-- 4 大查詢欄位：姓名、Email、聯絡電話、簽到狀況 -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#F8F9FA] p-4 rounded-2xl border border-gray-100 text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1">學員姓名</label>
@@ -95,7 +94,7 @@
         </div>
       </div>
 
-      <!-- 學員簽到資料表格 -->
+      <!-- 表格 -->
       <div class="overflow-x-auto pt-2">
         <table class="w-full text-left text-sm">
           <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
@@ -138,7 +137,7 @@
       </div>
     </div>
 
-    <!-- 底部：已簽到 / 未簽到 圓餅圖 -->
+    <!-- 圓餅圖 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
       <h2 class="text-base font-bold text-gray-800 mb-4 text-center">本堂課程學員簽到比例分佈</h2>
       <div class="max-w-xs mx-auto">
@@ -159,7 +158,6 @@
   </div>
 
   <script>
-    // 複合查詢邏輯 (姓名 + Email + 聯絡電話 + 簽到狀況)
     function applyFilter() {
       const nameKeyword = document.getElementById('filterName').value.trim().toLowerCase();
       const emailKeyword = document.getElementById('filterEmail').value.trim().toLowerCase();
@@ -175,7 +173,6 @@
         const rowPhone = row.getAttribute('data-phone') || '';
         const rowStatus = row.getAttribute('data-status') || '';
 
-        // 複合條件匹配 (AND 邏輯)
         const matchName = !nameKeyword || rowName.includes(nameKeyword);
         const matchEmail = !emailKeyword || rowEmail.includes(emailKeyword);
         const matchPhone = !phoneKeyword || rowPhone.includes(phoneKeyword);
@@ -192,7 +189,6 @@
       document.getElementById('filteredCount').innerText = visibleCount;
     }
 
-    // 重設所有篩選條件
     function resetFilters() {
       document.getElementById('filterName').value = '';
       document.getElementById('filterEmail').value = '';
@@ -201,7 +197,6 @@
       applyFilter();
     }
 
-    // 繪製圓餅圖 (Chart.js)
     const ctx = document.getElementById('attendancePieChart').getContext('2d');
     new Chart(ctx, {
       type: 'pie',

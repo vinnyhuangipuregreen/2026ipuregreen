@@ -137,12 +137,12 @@
       </div>
     </div>
 
-    <!-- 區塊二：課程清單 (依照紅箭頭：[簽到狀況] 已移至 [修改] 前面) -->
+    <!-- 課程清單：[簽到狀況] 與 [請假狀況] -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 class="text-base font-bold text-gray-800">課程清單 (共 {{ courses|length }} 堂)</h2>
-          <p class="text-xs text-gray-400 mt-0.5">點選每堂課右側的「簽到狀況」可檢視學員出席與複合查詢</p>
+          <p class="text-xs text-gray-400 mt-0.5">點選右側「簽到狀況」或「請假狀況」檢視學員出席狀態</p>
         </div>
         <div class="flex items-center gap-2">
           <label class="px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-xl cursor-pointer shadow-sm transition">
@@ -159,15 +159,16 @@
         {% for c in courses %}
         <div class="border border-gray-100 rounded-2xl p-5 hover:shadow-sm transition bg-white space-y-3">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <!-- 左側純淨顯示課程標題 -->
             <h3 class="font-bold text-gray-800 text-base">{{ c.title }}</h3>
 
-            <!-- 右側功能按鈕：[簽到狀況] 移至 [修改] 與 [刪除] 前面 -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
               <a href="/admin/courses/{{ c.id }}/attendance" class="px-3 py-1.5 bg-[#E8F5E9] hover:bg-[#C8E6C9] text-[#2E7D32] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
                 📊 簽到狀況
               </a>
-              <button onclick="editCourse({{ c.id }}, '{{ c.title }}', '{{ c.course_date }}', '{{ c.course_time }}', '{{ c.open_time }}')" class="text-xs text-[#3B7A57] hover:underline font-medium">修改</button>
+              <a href="/admin/courses/{{ c.id }}/leaves" class="px-3 py-1.5 bg-[#FFF3E0] hover:bg-[#FFE0B2] text-[#E65100] font-semibold text-xs rounded-xl flex items-center gap-1 transition shadow-sm">
+                📝 請假狀況
+              </a>
+              <button onclick="editCourse({{ c.id }}, '{{ c.title }}', '{{ c.course_date }}', '{{ c.course_time }}', '{{ c.open_time }}')" class="text-xs text-[#3B7A57] hover:underline font-medium ml-1">修改</button>
               <button onclick="deleteCourse({{ c.id }})" class="text-xs text-red-500 hover:underline font-medium">刪除</button>
             </div>
           </div>
@@ -422,7 +423,7 @@
       const res = await fetch('/api/admin/courses/import', { method: 'POST', body: formData });
       const data = await res.json();
       if (res.ok) { alert(`成功匯入 ${data.count} 筆課程！`); location.reload(); }
-      else alert('匯入失敗');
+      else alert(data.detail || '匯入失敗');
     }
   </script>
 </body>
