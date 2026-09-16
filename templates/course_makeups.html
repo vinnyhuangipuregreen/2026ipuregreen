@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>學員補課狀況 - {{ course.title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#F4F6F8] p-4 sm:p-6 text-gray-800">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- 頂部資訊卡片 -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div>
+        <a href="/admin" class="text-xs text-[#3B7A57] hover:underline font-medium">← 返回後台課程列表</a>
+        <h1 class="text-xl font-bold text-[#234E36] mt-1">{{ course.title }} · 學員補課狀況</h1>
+        <p class="text-xs text-gray-400 mt-0.5">📅 課程日期: {{ course.course_date }} | 🕒 課程時間: {{ course.course_time }}</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <button onclick="openAddMakeupModal()" class="px-3.5 py-2 bg-[#1565C0] hover:bg-[#0D47A1] text-white text-xs font-medium rounded-xl shadow-sm transition">
+          + 登記學員補課
+        </button>
+        <div class="bg-blue-50 border border-blue-100 px-5 py-3 rounded-2xl text-center">
+          <span class="text-xs text-blue-600 font-medium">補課總人數</span>
+          <div class="text-2xl font-bold text-[#1565C0]">{{ total_count }} 人</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 核心功能：【學員補課名冊複合查詢】(依附圖二樣式) -->
+    <!-- ============================================== -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
+          <span>🔍 學員補課名冊複合查詢</span>
+          <span class="text-xs text-gray-500 font-normal">
+            (符合條件：<span id="filteredCount" class="font-bold text-[#1565C0]">{{ total_count }}</span> / {{ total_count }} 人)
+          </span>
+        </h2>
+        <button onclick="resetFilters()" class="text-xs text-gray-400 hover:text-gray-600 transition">
+          重設所有條件
+        </button>
+      </div>
+
+      <!-- 4 大查詢欄位：學員姓名、Email、聯絡電話、補課日期區間 -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#F8F9FA] p-4 rounded-2xl border border-gray-100 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">學員姓名</label>
+          <input 
+            type="text" 
+            id="filterName" 
+            oninput="applyFilter()" 
+            placeholder="搜尋姓名..."
+            class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-sm text-gray-800 placeholder-gray-400 transition"
+          >
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">Email</label>
+          <input 
+            type="text" 
+            id="filterEmail" 
+            oninput="applyFilter()" 
+            placeholder="搜尋 Email..."
+            class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-sm text-gray-800 placeholder-gray-400 transition"
+          >
+        </div>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">聯絡電話</label>
+          <input 
+            type="text" 
+            id="filterPhone" 
+            oninput="applyFilter()" 
+            placeholder="搜尋聯絡電話..."
+            class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-sm text-gray-800 placeholder-gray-400 transition"
+          >
+        </div>
+
+        <!-- 補課日期區間選擇器 (起 ~ 訖) -->
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">補課日期</label>
+          <div class="flex items-center gap-1.5">
+            <input 
+              type="date" 
+              id="filterDateStart" 
+              onchange="applyFilter()" 
+              class="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-xs text-gray-800 transition"
+            >
+            <span class="text-gray-400">~</span>
+            <input 
+              type="date" 
+              id="filterDateEnd" 
+              onchange="applyFilter()" 
+              class="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-xs text-gray-800 transition"
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- 學員補課清單表格 (欄位：ID、姓名、Email、聯絡電話、補課日期、操作) -->
+      <div class="pt-2">
+        {% if total_count == 0 %}
+          <div class="py-12 text-center text-gray-400 text-sm">
+            📖 目前這堂課程尚無學員登記補課。
+          </div>
+        {% else %}
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
+                <tr>
+                  <th class="p-3.5 w-16">ID</th>
+                  <th class="p-3.5">姓名</th>
+                  <th class="p-3.5">Email</th>
+                  <th class="p-3.5">聯絡電話</th>
+                  <th class="p-3.5">補課日期</th>
+                  <th class="p-3.5 text-right w-32">操作</th>
+                </tr>
+              </thead>
+              <tbody id="makeupTableBody" class="divide-y divide-gray-100">
+                {% for r in records %}
+                <tr class="makeup-row hover:bg-gray-50/60 transition"
+                    data-name="{{ r.name|lower }}"
+                    data-email="{{ r.email|lower }}"
+                    data-phone="{{ r.phone }}"
+                    data-date="{{ r.makeup_date }}">
+                  <td class="p-3.5 text-gray-400 font-mono text-xs">{{ r.id }}</td>
+                  <td class="p-3.5 font-bold text-gray-800">{{ r.name }}</td>
+                  <td class="p-3.5 text-gray-600 text-xs">{{ r.email }}</td>
+                  <td class="p-3.5 text-gray-600 text-xs">{{ r.phone }}</td>
+                  <td class="p-3.5 text-xs text-[#1565C0] font-semibold">
+                    <span class="px-2.5 py-1 bg-[#E3F2FD] rounded-lg inline-block">
+                      📅 {{ r.makeup_date }}
+                    </span>
+                  </td>
+                  <td class="p-3.5 text-right">
+                    <!-- 核心需求：[取消補課] 刪除該筆紀錄 -->
+                    <button onclick="cancelMakeup({{ course.id }}, {{ r.id }}, '{{ r.name }}')" 
+                      class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-xl transition shadow-xs">
+                      取消補課
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div id="noResultMsg" class="hidden py-8 text-center text-gray-400 text-xs">
+            查無符合篩選條件的補課學員資料。
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 彈窗：登記學員補課 Modal -->
+  <div id="addMakeupModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-lg space-y-4">
+      <h3 class="text-lg font-bold text-gray-800">登記學員補課</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">選擇學員</label>
+          <select id="modalStudentSelect" class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30">
+            {% for s in all_students %}
+              <option value="{{ s.id }}">{{ s.name }} ({{ s.email }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">補課日期</label>
+          <input type="date" id="modalMakeupDate" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeAddMakeupModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+        <button onclick="submitAddMakeup({{ course.id }})" class="px-4 py-2 bg-[#1565C0] hover:bg-[#0D47A1] text-white text-sm font-medium rounded-xl">確認登記</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 複合查詢邏輯 (姓名 + Email + 聯絡電話 + 補課日期起訖)
+    function applyFilter() {
+      const nameKeyword = document.getElementById('filterName').value.trim().toLowerCase();
+      const emailKeyword = document.getElementById('filterEmail').value.trim().toLowerCase();
+      const phoneKeyword = document.getElementById('filterPhone').value.trim();
+      const dateStart = document.getElementById('filterDateStart').value;
+      const dateEnd = document.getElementById('filterDateEnd').value;
+
+      const rows = document.querySelectorAll('.makeup-row');
+      let visibleCount = 0;
+
+      rows.forEach(row => {
+        const rowName = row.getAttribute('data-name') || '';
+        const rowEmail = row.getAttribute('data-email') || '';
+        const rowPhone = row.getAttribute('data-phone') || '';
+        const rowDate = row.getAttribute('data-date') || '';
+
+        const matchName = !nameKeyword || rowName.includes(nameKeyword);
+        const matchEmail = !emailKeyword || rowEmail.includes(emailKeyword);
+        const matchPhone = !phoneKeyword || rowPhone.includes(phoneKeyword);
+
+        // 日期區間比對
+        let matchDate = true;
+        if (dateStart && rowDate < dateStart) matchDate = false;
+        if (dateEnd && rowDate > dateEnd) matchDate = false;
+
+        if (matchName && matchEmail && matchPhone && matchDate) {
+          row.style.display = '';
+          visibleCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      const countEl = document.getElementById('filteredCount');
+      if (countEl) countEl.innerText = visibleCount;
+
+      const noResult = document.getElementById('noResultMsg');
+      if (noResult) {
+        if (visibleCount === 0 && rows.length > 0) {
+          noResult.classList.remove('hidden');
+        } else {
+          noResult.classList.add('hidden');
+        }
+      }
+    }
+
+    function resetFilters() {
+      document.getElementById('filterName').value = '';
+      document.getElementById('filterEmail').value = '';
+      document.getElementById('filterPhone').value = '';
+      document.getElementById('filterDateStart').value = '';
+      document.getElementById('filterDateEnd').value = '';
+      applyFilter();
+    }
+
+    function openAddMakeupModal() {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('modalMakeupDate').value = today;
+      document.getElementById('addMakeupModal').classList.remove('hidden');
+    }
+    function closeAddMakeupModal() {
+      document.getElementById('addMakeupModal').classList.add('hidden');
+    }
+
+    async function submitAddMakeup(courseId) {
+      const student_id = document.getElementById('modalStudentSelect').value;
+      const makeup_date = document.getElementById('modalMakeupDate').value;
+      if (!student_id || !makeup_date) return alert('請完整選擇！');
+
+      const res = await fetch(`/api/admin/courses/${courseId}/makeups`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ student_id: parseInt(student_id), makeup_date })
+      });
+      if (res.ok) {
+        alert('補課登記成功！');
+        location.reload();
+      } else {
+        alert('登記失敗');
+      }
+    }
+
+    // 取消補課 (刪除該筆補課紀錄)
+    async function cancelMakeup(courseId, studentId, studentName) {
+      if (!confirm(`確定要取消學員【${studentName}】的補課紀錄嗎？\n取消後該學員在該堂課將恢復為正常未簽到狀態。`)) {
+        return;
+      }
+
+      const res = await fetch(`/api/admin/courses/${courseId}/makeups/${studentId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('已成功取消該筆補課紀錄！');
+        location.reload();
+      } else {
+        alert(data.error || '操作失敗');
+      }
+    }
+  </script>
+</body>
+</html>
