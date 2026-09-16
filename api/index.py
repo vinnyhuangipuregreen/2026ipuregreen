@@ -18,14 +18,13 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 SECRET_KEY = os.getenv("SECRET_KEY", "ipuregreen-blia-secret-key-2026")
 
-# 資料庫模擬資料
+# 資料庫預設資料
 db = {
-    # 管理者帳號清單 (最高管理者：service@ipuregreen.org)
     "admins": [
         {
             "id": 1,
             "email": "service@ipuregreen.org",
-            "password": "2026bila",
+            "password": "2026ipuregreen",
             "status": "active",
             "role": "superadmin"
         },
@@ -97,7 +96,6 @@ async def login_page(request: Request):
             return RedirectResponse(url="/dashboard", status_code=302)
     return templates.TemplateResponse(request=request, name="login.html", context={})
 
-# 學員登出 (秒退)
 @app.get("/logout")
 async def logout():
     resp = RedirectResponse(url="/", status_code=302)
@@ -183,7 +181,6 @@ async def api_leave(request: Request):
     }
     return {"success": True}
 
-
 # ==========================================
 # 後台管理：登入 / 修改密碼 / 忘記密碼 / 帳號維護
 # ==========================================
@@ -194,7 +191,6 @@ async def admin_login_page(request: Request):
         return RedirectResponse(url="/admin", status_code=302)
     return templates.TemplateResponse(request=request, name="admin_login.html", context={})
 
-# 關鍵補齊：管理者登入 API
 @app.post("/api/admin/auth/login")
 async def admin_login(email: str = Form(...), password: str = Form(...)):
     admin = next((a for a in db["admins"] if a["email"].strip().lower() == email.strip().lower() and a["password"] == password.strip()), None)
@@ -209,14 +205,12 @@ async def admin_login(email: str = Form(...), password: str = Form(...)):
     resp.set_cookie("admin_token", token, httponly=True, max_age=86400*7, path="/")
     return resp
 
-# 管理者登出 (秒退至登入頁)
 @app.get("/api/admin/auth/logout")
 async def admin_logout():
     resp = RedirectResponse(url="/admin/login", status_code=302)
     resp.delete_cookie(key="admin_token", path="/")
     return resp
 
-# 修改管理者密碼 API
 @app.post("/api/admin/auth/change-password")
 async def change_password(request: Request):
     current_admin = get_current_admin(request)
@@ -234,7 +228,6 @@ async def change_password(request: Request):
     current_admin["password"] = new_pwd
     return {"success": True}
 
-# 忘記密碼 API
 @app.post("/api/admin/auth/forgot-password")
 async def forgot_password(request: Request):
     data = await request.json()
@@ -265,7 +258,7 @@ async def admin_page(request: Request):
         }
     )
 
-# 課程學員登入狀況頁面 (含圓餅圖)
+# 課程學員簽到狀況頁面 (含圓餅圖)
 @app.get("/admin/courses/{course_id}/attendance", response_class=HTMLResponse)
 async def course_attendance_page(course_id: int, request: Request):
     if not get_current_admin(request):
@@ -347,7 +340,6 @@ async def update_admin_account(account_id: int, request: Request):
     if not target:
         raise HTTPException(status_code=404, detail="查無此帳號")
     
-    # 最高權限保護規則：service@ipuregreen.org 不可設定為停用
     if target["email"].lower() == "service@ipuregreen.org":
         if data.get("status") == "disabled":
             return JSONResponse(status_code=400, content={"error": "最高權限帳號不可設定為停用！"})
@@ -371,7 +363,6 @@ async def delete_admin_account(account_id: int, request: Request):
     if not target:
         raise HTTPException(status_code=404, detail="查無此帳號")
     
-    # 最高權限帳號不可刪除
     if target["email"].lower() == "service@ipuregreen.org" or target.get("role") == "superadmin":
         return JSONResponse(status_code=400, content={"error": "此為最高權限帳號 (service@ipuregreen.org)，嚴禁刪除！"})
     
@@ -379,10 +370,120 @@ async def delete_admin_account(account_id: int, request: Request):
     return {"success": True}
 
 # ==========================================
-# 學員與課程 CRUD API
+# 學員與課程 CRUD API (含 Admin 權限驗證與 Excel 正確解構)
 # ==========================================
+
+# 1. 課程匯入 (核心修復：Admin 專屬 + 精準解構 4 欄位)
+@app.post("/api/admin/courses/import")
+async def import_courses(request: Request, file: UploadFile = File(...)):
+    # 嚴格確認管理者權限
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        raise HTTPException(status_code=401, detail="未授權，匯入功能僅限管理者使用！")
+
+    contents = await file.read()
+    filename = file.filename.lower()
+    imported_count = 0
+    rows = []
+
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        sheet = wb.active
+        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
+    elif filename.endswith(".csv"):
+        text = contents.decode("utf-8-sig", errors="ignore")
+        rows = list(csv.reader(io.StringIO(text)))
+    else:
+        raise HTTPException(status_code=400, detail="請上傳 .xlsx 或 .csv 檔案")
+
+    def cell_to_str(val):
+        if val is None:
+            return ""
+        if isinstance(val, datetime):
+            return val.strftime("%Y-%m-%d %H:%M:%S")
+        if hasattr(val, "strftime"):
+            return val.strftime("%Y-%m-%d")
+        return str(val).strip()
+
+    for r in rows[1:]:
+        row_vals = [cell_to_str(x) for x in r]
+        if len(row_vals) < 4 or not row_vals[0]:
+            continue
+
+        # 精準抓取 4 個獨立欄位 (避免整列字串化)
+        title, raw_date, raw_time, raw_open = row_vals[:4]
+        
+        # 轉換為標準日期 2026/09/15 (完全符合圖二樣式)
+        cdate = raw_date.replace("-", "/").split(" ")[0]
+        ctime = raw_time
+        otime = raw_open
+
+        # 智慧覆蓋更新已存在之課程，並修復原本破損的資料
+        existing = next((c for c in db["courses"] if c["title"].strip() == title), None)
+        if existing:
+            existing["course_date"] = cdate
+            existing["course_time"] = ctime
+            existing["open_time"] = otime
+        else:
+            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
+            db["courses"].append({
+                "id": new_id,
+                "title": title,
+                "course_date": cdate,
+                "course_time": ctime,
+                "open_time": otime
+            })
+        imported_count += 1
+
+    return {"success": True, "count": imported_count}
+
+# 2. 學員匯入 (核心修復：Admin 專屬 + 精準解構 3 欄位)
+@app.post("/api/admin/students/import")
+async def import_students(request: Request, file: UploadFile = File(...)):
+    current_admin = get_current_admin(request)
+    if not current_admin:
+        raise HTTPException(status_code=401, detail="未授權，匯入功能僅限管理者使用！")
+
+    contents = await file.read()
+    filename = file.filename.lower()
+    imported_count = 0
+    rows = []
+
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        sheet = wb.active
+        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
+    elif filename.endswith(".csv"):
+        text = contents.decode("utf-8-sig", errors="ignore")
+        rows = list(csv.reader(io.StringIO(text)))
+    else:
+        raise HTTPException(status_code=400, detail="請上傳 .xlsx 或 .csv 檔案")
+
+    def cell_to_str(val):
+        return str(val).strip() if val is not None else ""
+
+    for r in rows[1:]:
+        row_vals = [cell_to_str(x) for x in r]
+        if len(row_vals) < 3 or not row_vals[0]:
+            continue
+
+        name, email, phone = row_vals[:3]
+
+        existing = next((s for s in db["students"] if s["email"].lower() == email.lower()), None)
+        if existing:
+            existing["name"] = name
+            existing["phone"] = phone
+        else:
+            new_id = max([s["id"] for s in db["students"]], default=0) + 1
+            db["students"].append({"id": new_id, "name": name, "email": email, "phone": phone})
+        imported_count += 1
+
+    return {"success": True, "count": imported_count}
+
+# 3. 手動新增/修改/刪除 學員與課程
 @app.post("/api/admin/students")
 async def add_student(request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
     data = await request.json()
     new_id = max([s["id"] for s in db["students"]], default=0) + 1
     new_student = {"id": new_id, "name": data.get("name", "").strip(), "email": data.get("email", "").strip(), "phone": data.get("phone", "").strip()}
@@ -391,6 +492,7 @@ async def add_student(request: Request):
 
 @app.put("/api/admin/students/{student_id}")
 async def update_student(student_id: int, request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
     data = await request.json()
     for s in db["students"]:
         if s["id"] == student_id:
@@ -401,35 +503,14 @@ async def update_student(student_id: int, request: Request):
     raise HTTPException(status_code=404, detail="查無此學員")
 
 @app.delete("/api/admin/students/{student_id}")
-async def delete_student(student_id: int):
+async def delete_student(student_id: int, request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
     db["students"] = [s for s in db["students"] if s["id"] != student_id]
     return {"success": True}
 
-@app.post("/api/admin/students/import")
-async def import_students(file: UploadFile = File(...)):
-    contents = await file.read()
-    filename = file.filename.lower()
-    imported_count = 0
-    if filename.endswith(".xlsx") or filename.endswith(".xls"):
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
-        rows = list(sheet.iter_rows(values_only=True)) if (sheet := wb.active) else []
-        for r in rows[1:]:
-            if not r or len(r) < 3 or not r[0]: continue
-            new_id = max([s["id"] for s in db["students"]], default=0) + 1
-            db["students"].append({"id": new_id, "name": str(r[0]).strip(), "email": str(r).strip(), "phone": str(r).strip()})
-            imported_count += 1
-    elif filename.endswith(".csv"):
-        text = contents.decode("utf-8-sig", errors="ignore")
-        rows = list(csv.reader(io.StringIO(text)))
-        for r in rows[1:]:
-            if not r or len(r) < 3 or not r[0]: continue
-            new_id = max([s["id"] for s in db["students"]], default=0) + 1
-            db["students"].append({"id": new_id, "name": r[0].strip(), "email": r.strip(), "phone": r.strip()})
-            imported_count += 1
-    return {"success": True, "count": imported_count}
-
 @app.post("/api/admin/courses")
 async def add_course(request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
     data = await request.json()
     new_id = max([c["id"] for c in db["courses"]], default=0) + 1
     new_course = {"id": new_id, "title": data.get("title", "").strip(), "course_date": data.get("course_date", "").strip(), "course_time": data.get("course_time", "").strip(), "open_time": data.get("open_time", "").strip()}
@@ -438,6 +519,7 @@ async def add_course(request: Request):
 
 @app.put("/api/admin/courses/{course_id}")
 async def update_course(course_id: int, request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
     data = await request.json()
     for c in db["courses"]:
         if c["id"] == course_id:
@@ -449,29 +531,7 @@ async def update_course(course_id: int, request: Request):
     raise HTTPException(status_code=404, detail="查無此課程")
 
 @app.delete("/api/admin/courses/{course_id}")
-async def delete_course(course_id: int):
+async def delete_course(course_id: int, request: Request):
+    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
     db["courses"] = [c for c in db["courses"] if c["id"] != course_id]
     return {"success": True}
-
-@app.post("/api/admin/courses/import")
-async def import_courses(file: UploadFile = File(...)):
-    contents = await file.read()
-    filename = file.filename.lower()
-    imported_count = 0
-    if filename.endswith(".xlsx") or filename.endswith(".xls"):
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
-        rows = list(sheet.iter_rows(values_only=True)) if (sheet := wb.active) else []
-        for r in rows[1:]:
-            if not r or len(r) < 4 or not r[0]: continue
-            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
-            db["courses"].append({"id": new_id, "title": str(r[0]).strip(), "course_date": str(r).strip(), "course_time": str(r).strip(), "open_time": str(r).strip()})
-            imported_count += 1
-    elif filename.endswith(".csv"):
-        text = contents.decode("utf-8-sig", errors="ignore")
-        rows = list(csv.reader(io.StringIO(text)))
-        for r in rows[1:]:
-            if not r or len(r) < 4 or not r[0]: continue
-            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
-            db["courses"].append({"id": new_id, "title": r[0].strip(), "course_date": r.strip(), "course_time": r.strip(), "open_time": r.strip()})
-            imported_count += 1
-    return {"success": True, "count": imported_count}
