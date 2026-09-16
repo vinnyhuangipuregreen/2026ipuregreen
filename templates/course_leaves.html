@@ -5,10 +5,10 @@
   <title>學員請假狀況 - {{ course.title }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-[#F4F6F8] p-6 text-gray-800">
+<body class="min-h-screen bg-[#F4F6F8] p-4 sm:p-6 text-gray-800">
   <div class="max-w-6xl mx-auto space-y-6">
 
-    <!-- 頂部卡片 -->
+    <!-- 頂部資訊卡片 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <a href="/admin" class="text-xs text-[#3B7A57] hover:underline font-medium">← 返回後台課程列表</a>
@@ -21,56 +21,165 @@
       </div>
     </div>
 
-    <!-- 請假學員清單表格 -->
+    <!-- ============================================== -->
+    <!-- 核心功能：【學員請假名冊複合查詢】(依截圖設計) -->
+    <!-- ============================================== -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-      <h2 class="text-base font-bold text-gray-800">請假學員清單</h2>
+      <div class="flex justify-between items-center">
+        <h2 class="text-base font-bold text-gray-800 flex items-center gap-2">
+          <span>🔍 學員請假名冊複合查詢</span>
+          <span class="text-xs text-gray-500 font-normal">
+            (符合條件：<span id="filteredCount" class="font-bold text-[#E65100]">{{ total_count }}</span> / {{ total_count }} 人)
+          </span>
+        </h2>
+        <button onclick="resetFilters()" class="text-xs text-gray-400 hover:text-gray-600 transition">
+          重設所有條件
+        </button>
+      </div>
 
-      {% if total_count == 0 %}
-        <div class="py-12 text-center text-gray-400 text-sm">
-          🍃 目前這堂課程尚無學員請假。
+      <!-- 3 個複合查詢欄位：學員姓名、Email、聯絡電話 (完全依附圖樣式) -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#F8F9FA] p-4 rounded-2xl border border-gray-100 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">學員姓名</label>
+          <input 
+            type="text" 
+            id="filterName" 
+            oninput="applyFilter()" 
+            placeholder="搜尋姓名..."
+            class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 text-sm text-gray-800 placeholder-gray-400 transition"
+          >
         </div>
-      {% else %}
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
-              <tr>
-                <th class="p-3.5">學員姓名</th>
-                <th class="p-3.5">Email</th>
-                <th class="p-3.5">聯絡電話</th>
-                <th class="p-3.5">請假原因</th>
-                <th class="p-3.5">申請時間</th>
-                <th class="p-3.5 text-right w-32">操作</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              {% for r in records %}
-              <tr class="hover:bg-gray-50/60 transition">
-                <td class="p-3.5 font-bold text-gray-800">{{ r.name }}</td>
-                <td class="p-3.5 text-gray-600 text-xs">{{ r.email }}</td>
-                <td class="p-3.5 text-gray-600 text-xs">{{ r.phone }}</td>
-                <td class="p-3.5 text-xs text-gray-700 max-w-xs break-words bg-orange-50/40 rounded-lg">
-                  {{ r.reason }}
-                </td>
-                <td class="p-3.5 text-xs text-gray-400 font-mono">{{ r.updated_at }}</td>
-                <td class="p-3.5 text-right">
-                  <button onclick="cancelLeave({{ course.id }}, {{ r.student_id }}, '{{ r.name }}')" 
-                    class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-xl transition shadow-xs">
-                    取消請假
-                  </button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">Email</label>
+          <input 
+            type="text" 
+            id="filterEmail" 
+            oninput="applyFilter()" 
+            placeholder="搜尋 Email..."
+            class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 text-sm text-gray-800 placeholder-gray-400 transition"
+          >
         </div>
-      {% endif %}
+
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1.5">聯絡電話</label>
+          <input 
+            type="text" 
+            id="filterPhone" 
+            oninput="applyFilter()" 
+            placeholder="搜尋聯絡電話..."
+            class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 text-sm text-gray-800 placeholder-gray-400 transition"
+          >
+        </div>
+      </div>
+
+      <!-- 請假學員清單表格 -->
+      <div class="pt-2">
+        {% if total_count == 0 %}
+          <div class="py-12 text-center text-gray-400 text-sm">
+            🍃 目前這堂課程尚無學員請假。
+          </div>
+        {% else %}
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-[#F8F9FA] text-gray-500 font-medium text-xs">
+                <tr>
+                  <th class="p-3.5">學員姓名</th>
+                  <th class="p-3.5">Email</th>
+                  <th class="p-3.5">聯絡電話</th>
+                  <th class="p-3.5">請假原因</th>
+                  <th class="p-3.5">申請時間</th>
+                  <th class="p-3.5 text-right w-32">操作</th>
+                </tr>
+              </thead>
+              <tbody id="leaveTableBody" class="divide-y divide-gray-100">
+                {% for r in records %}
+                <tr class="leave-row hover:bg-gray-50/60 transition"
+                    data-name="{{ r.name|lower }}"
+                    data-email="{{ r.email|lower }}"
+                    data-phone="{{ r.phone }}">
+                  <td class="p-3.5 font-bold text-gray-800">{{ r.name }}</td>
+                  <td class="p-3.5 text-gray-600 text-xs">{{ r.email }}</td>
+                  <td class="p-3.5 text-gray-600 text-xs">{{ r.phone }}</td>
+                  <td class="p-3.5 text-xs text-gray-700 max-w-xs break-words bg-orange-50/40 rounded-lg">
+                    {{ r.reason }}
+                  </td>
+                  <td class="p-3.5 text-xs text-gray-400 font-mono">{{ r.updated_at }}</td>
+                  <td class="p-3.5 text-right">
+                    <button onclick="cancelLeave({{ course.id }}, {{ r.student_id }}, '{{ r.name }}')" 
+                      class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-xl transition shadow-xs">
+                      取消請假
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <!-- 搜尋無結果提示 -->
+          <div id="noResultMsg" class="hidden py-8 text-center text-gray-400 text-xs">
+            查無符合篩選條件的請假學員資料。
+          </div>
+        {% endif %}
+      </div>
     </div>
 
   </div>
 
   <script>
+    // 複合查詢即時過濾 (姓名、Email、聯絡電話)
+    function applyFilter() {
+      const nameKeyword = document.getElementById('filterName').value.trim().toLowerCase();
+      const emailKeyword = document.getElementById('filterEmail').value.trim().toLowerCase();
+      const phoneKeyword = document.getElementById('filterPhone').value.trim();
+
+      const rows = document.querySelectorAll('.leave-row');
+      let visibleCount = 0;
+
+      rows.forEach(row => {
+        const rowName = row.getAttribute('data-name') || '';
+        const rowEmail = row.getAttribute('data-email') || '';
+        const rowPhone = row.getAttribute('data-phone') || '';
+
+        // 複合 AND 條件匹配
+        const matchName = !nameKeyword || rowName.includes(nameKeyword);
+        const matchEmail = !emailKeyword || rowEmail.includes(emailKeyword);
+        const matchPhone = !phoneKeyword || rowPhone.includes(phoneKeyword);
+
+        if (matchName && matchEmail && matchPhone) {
+          row.style.display = '';
+          visibleCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // 更新符合條件之計數
+      const countEl = document.getElementById('filteredCount');
+      if (countEl) countEl.innerText = visibleCount;
+
+      // 無符合資料提示
+      const noResult = document.getElementById('noResultMsg');
+      if (noResult) {
+        if (visibleCount === 0 && rows.length > 0) {
+          noResult.classList.remove('hidden');
+        } else {
+          noResult.classList.add('hidden');
+        }
+      }
+    }
+
+    // 重設所有篩選條件
+    function resetFilters() {
+      document.getElementById('filterName').value = '';
+      document.getElementById('filterEmail').value = '';
+      document.getElementById('filterPhone').value = '';
+      applyFilter();
+    }
+
+    // 取消請假功能 (刪除請假紀錄)
     async function cancelLeave(courseId, studentId, studentName) {
-      if (!confirm(`確定要取消學員【${studentName}】的請假申請嗎？\n取消後該學員在該堂課將恢復為正常可簽到狀態。`)) {
+      if (!confirm(`確定要取消學員【${studentName}】的請假申請嗎？\n取消後該學員在該堂課將恢復為正常未簽到狀態。`)) {
         return;
       }
 
