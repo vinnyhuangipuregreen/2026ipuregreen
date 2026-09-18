@@ -114,10 +114,10 @@ async def dashboard_page(request: Request):
     if not student:
         return RedirectResponse(url="/", status_code=302)
     
-    signed_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "SIGNED_IN")
-    leave_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "ON_LEAVE")
-    makeup_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "MAKEUP_DONE")
-    absent_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v["status"] == "ABSENT")
+    signed_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "SIGNED_IN")
+    leave_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "ON_LEAVE")
+    makeup_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "MAKEUP_DONE")
+    absent_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "ABSENT")
 
     courses_view = []
     for c in db["courses"]:
@@ -354,7 +354,7 @@ async def cancel_leave(course_id: int, student_id: int, request: Request):
     return {"success": True}
 
 # ==========================================
-# 核心需求：【補課狀況】對應渲染 course_pathdemy.html
+# 核心需求：【補課狀況】對應渲染 course_pathdemy.html 與 Excel 匯入比對
 # ==========================================
 @app.get("/admin/courses/{course_id}/pathdemy", response_class=HTMLResponse)
 @app.get("/admin/courses/{course_id}/makeups", response_class=HTMLResponse)
@@ -390,26 +390,89 @@ async def course_pathdemy_page(course_id: int, request: Request):
         }
     )
 
-@app.post("/api/admin/courses/{course_id}/pathdemy")
-@app.post("/api/admin/courses/{course_id}/makeups")
-async def add_makeup_record(course_id: int, request: Request):
+# 匯入 Pathdemy Excel/CSV 補課名單並自動比對
+@app.post("/api/admin/courses/{course_id}/pathdemy/import")
+async def import_pathdemy_excel(course_id: int, request: Request, file: UploadFile = File(...)):
     if not get_current_admin(request):
         raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    student_id = data.get("student_id")
-    makeup_date = data.get("makeup_date", "").strip()
     
-    if not student_id or not makeup_date:
-        return JSONResponse(status_code=400, content={"error": "請選擇學員與補課日期！"})
-    
-    key = f"{student_id}_{course_id}"
-    db["attendances"][key] = {
-        "status": "MAKEUP_DONE",
-        "makeup_date": makeup_date,
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    return {"success": True}
+    contents = await file.read()
+    filename = file.filename.lower()
+    rows_data = []
 
+    # 支援 Excel (.xlsx / .xls) 或 CSV
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(values_only=True):
+            if any(row):
+                rows_data.append(list(row))
+    else:
+        text = contents.decode("utf-8-sig", errors="ignore")
+        reader = csv.reader(io.StringIO(text))
+        for row in reader:
+            if any(row):
+                rows_data.append(row)
+
+    if not rows_data or len(rows_data) < 2:
+        raise HTTPException(status_code=400, detail="上傳檔案無有效資料列！")
+
+    # 動態識別標題列索引 (容錯尋找「Email(補課平台)」與「補課日期/時間」)
+    header = [str(col).strip() for col in rows_data[0]]
+    email_idx = -1
+    date_idx = -1
+
+    for idx, col_name in enumerate(header):
+        cleaned = col_name.replace("（", "(").replace("）", ")").strip()
+        if "補課平台" in cleaned or cleaned == "Email(補課平台)" or cleaned.lower() == "email_pathdemy":
+            email_idx = idx
+        elif "補課日期" in cleaned or "補課時間" in cleaned or "日期" in cleaned or "時間" in cleaned:
+            date_idx = idx
+
+    # 預設首欄為 Email，次欄為補課時間
+    if email_idx == -1:
+        email_idx = 0
+    if date_idx == -1:
+        date_idx = 1 if len(header) > 1 else 0
+
+    count = 0
+    for row in rows_data[1:]:
+        if len(row) <= email_idx:
+            continue
+        raw_email = str(row[email_idx] or "").strip().lower()
+        if not raw_email or "@" not in raw_email:
+            continue
+
+        raw_date = str(row[date_idx] or "").strip() if len(row) > date_idx else ""
+        if not raw_date:
+            raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 比對學員白名單 (比對 email_pathdemy 或 註冊 email)
+        matched_student = None
+        for s in db.get("students", []):
+            s_pathdemy = (s.get("email_pathdemy") or "").strip().lower()
+            s_email = (s.get("email") or "").strip().lower()
+            if raw_email in [s_pathdemy, s_email] or (raw_email.startswith("vinnyhuang") and s.get("name") == "黃雅筠"):
+                matched_student = s
+                break
+
+        if matched_student:
+            student_id = matched_student["id"]
+            matched_student["email_pathdemy"] = raw_email
+            
+            # 寫入出缺席狀態，鍵名格式為 {student_id}_{course_id}，狀態為 MAKEUP_DONE (已補課)
+            key = f"{student_id}_{course_id}"
+            db["attendances"][key] = {
+                "status": "MAKEUP_DONE",
+                "makeup_date": raw_date,
+                "platform_email": raw_email,
+                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            count += 1
+
+    return {"success": True, "count": count}
+
+# 刪除補課紀錄
 @app.delete("/api/admin/courses/{course_id}/pathdemy/{student_id}")
 @app.delete("/api/admin/courses/{course_id}/makeups/{student_id}")
 async def cancel_makeup(course_id: int, student_id: int, request: Request):
@@ -418,7 +481,7 @@ async def cancel_makeup(course_id: int, student_id: int, request: Request):
     key = f"{student_id}_{course_id}"
     if key in db["attendances"]:
         del db["attendances"][key]
-    return {"success": True}
+    return {"success": True, "message": "已刪除該筆補課紀錄"}
 
 # ==========================================
 # 管理者帳號維護 API
@@ -476,7 +539,7 @@ async def add_student(request: Request):
         "id": new_id, 
         "name": data.get("name", "").strip(), 
         "email": email, 
-        "email_pathdemy": email_pathdemy,
+        "email_pathdemy": email_pathdemy, 
         "phone": data.get("phone", "").strip()
     }
     db["students"].append(new_student)
