@@ -4,13 +4,11 @@
   <meta charset="UTF-8">
   <title>學員補課狀況 - {{ course.title }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 引入 SheetJS 作為 Excel/CSV 解析支援 -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body class="min-h-screen bg-[#F4F6F8] p-4 sm:p-6 text-gray-800">
   <div class="max-w-7xl mx-auto space-y-6">
 
-    <!-- 頂部資訊卡片 (已移除「+ 登記學員補課」按鈕，保留補課總人數卡片) -->
+    <!-- 頂部資訊卡片 -->
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
         <a href="/admin" class="text-xs text-[#3B7A57] hover:underline font-medium">← 返回後台課程列表</a>
@@ -18,7 +16,6 @@
         <p class="text-xs text-gray-400 mt-0.5">📅 課程日期: {{ course.course_date }} | 🕒 課程時間: {{ course.course_time }}</p>
       </div>
       <div class="flex items-center gap-4">
-        <!-- 補課總人數統計卡片 -->
         <div class="bg-blue-50 border border-blue-100 px-5 py-3 rounded-2xl text-center">
           <span class="text-xs text-blue-600 font-medium">補課總人數</span>
           <div class="text-2xl font-bold text-[#1565C0]"><span id="totalMakeupCount">{{ total_count }}</span> 人</div>
@@ -35,8 +32,6 @@
             (符合條件：<span id="filteredCount" class="font-bold text-[#1565C0]">{{ total_count }}</span> / {{ total_count }} 人)
           </span>
         </h2>
-        
-        <!-- 右側按鈕群：新增「📥 匯入 Excel/CSV」與「重設所有條件」 -->
         <div class="flex items-center gap-2.5">
           <label class="px-3.5 py-1.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-medium rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer">
             <span class="text-red-500 text-sm">📥</span>
@@ -49,62 +44,31 @@
         </div>
       </div>
 
-      <!-- 4 大查詢欄位：姓名、Email/補課平台 Email、電話、日期區間 -->
+      <!-- 查詢欄位 -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#F8F9FA] p-4 rounded-2xl border border-gray-100 text-xs">
         <div>
           <label class="block font-semibold text-gray-600 mb-1.5">學員姓名</label>
-          <input 
-            type="text" 
-            id="filterName" 
-            oninput="applyFilter()" 
-            placeholder="搜尋姓名..."
-            class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-sm text-gray-800 placeholder-gray-400 transition"
-          >
+          <input type="text" id="filterName" oninput="applyFilter()" placeholder="搜尋姓名..." class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm">
         </div>
-
         <div>
           <label class="block font-semibold text-gray-600 mb-1.5">Email / 補課平台 Email</label>
-          <input 
-            type="text" 
-            id="filterEmail" 
-            oninput="applyFilter()" 
-            placeholder="搜尋 Email..."
-            class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-sm text-gray-800 placeholder-gray-400 transition"
-          >
+          <input type="text" id="filterEmail" oninput="applyFilter()" placeholder="搜尋 Email..." class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm">
         </div>
-
         <div>
           <label class="block font-semibold text-gray-600 mb-1.5">聯絡電話</label>
-          <input 
-            type="text" 
-            id="filterPhone" 
-            oninput="applyFilter()" 
-            placeholder="搜尋聯絡電話..."
-            class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-sm text-gray-800 placeholder-gray-400 transition"
-          >
+          <input type="text" id="filterPhone" oninput="applyFilter()" placeholder="搜尋聯絡電話..." class="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm">
         </div>
-
         <div>
           <label class="block font-semibold text-gray-600 mb-1.5">補課日期</label>
           <div class="flex items-center gap-1.5">
-            <input 
-              type="date" 
-              id="filterDateStart" 
-              onchange="applyFilter()" 
-              class="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-xs text-gray-800 transition"
-            >
+            <input type="date" id="filterDateStart" onchange="applyFilter()" class="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs">
             <span class="text-gray-400">~</span>
-            <input 
-              type="date" 
-              id="filterDateEnd" 
-              onchange="applyFilter()" 
-              class="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30 text-xs text-gray-800 transition"
-            >
+            <input type="date" id="filterDateEnd" onchange="applyFilter()" class="w-full px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs">
           </div>
         </div>
       </div>
 
-      <!-- 表格：欄位為 [學員姓名]、[Email]、[Email(補課平台)]、[聯絡電話]、[補課時間]、[刪除補課] -->
+      <!-- 表格：含 [備註] 欄位 -->
       <div class="pt-2">
         {% if total_count == 0 %}
           <div class="py-12 text-center text-gray-400 text-sm">
@@ -120,6 +84,7 @@
                   <th class="p-3.5 text-blue-700">Email(補課平台)</th>
                   <th class="p-3.5">聯絡電話</th>
                   <th class="p-3.5">補課時間</th>
+                  <th class="p-3.5">備註</th>
                   <th class="p-3.5 text-center w-28">刪除補課</th>
                 </tr>
               </thead>
@@ -139,6 +104,18 @@
                     <span class="px-2.5 py-1 bg-[#E3F2FD] rounded-lg inline-block">
                       📅 {{ r.makeup_date }}
                     </span>
+                  </td>
+                  <td class="p-3.5 text-xs">
+                    {% if r.note == '自行登錄' %}
+                      <span class="px-2.5 py-1 bg-blue-50 text-[#1565C0] font-semibold rounded-lg border border-blue-200">
+                        自行登錄
+                      </span>
+                    {% else %}
+                      <span title="{{ r.imported_by or '管理員' }}" class="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-lg border border-emerald-200 cursor-help inline-flex items-center gap-1">
+                        <span>管理員批次匯入</span>
+                        <span class="text-[10px] text-emerald-500">ⓘ</span>
+                      </span>
+                    {% endif %}
                   </td>
                   <td class="p-3.5 text-center">
                     <button onclick="deleteMakeup({{ course.id }}, {{ r.id }}, '{{ r.name }}')" 
@@ -161,7 +138,6 @@
   </div>
 
   <script>
-    // 複合查詢過濾函式
     function applyFilter() {
       const nameKeyword = document.getElementById('filterName').value.trim().toLowerCase();
       const emailKeyword = document.getElementById('filterEmail').value.trim().toLowerCase();
@@ -200,11 +176,8 @@
 
       const noResult = document.getElementById('noResultMsg');
       if (noResult) {
-        if (visibleCount === 0 && rows.length > 0) {
-          noResult.classList.remove('hidden');
-        } else {
-          noResult.classList.add('hidden');
-        }
+        if (visibleCount === 0 && rows.length > 0) noResult.classList.remove('hidden');
+        else noResult.classList.add('hidden');
       }
     }
 
@@ -217,7 +190,6 @@
       applyFilter();
     }
 
-    // 上傳 Excel/CSV 並送出比對
     async function uploadPathdemyExcel(e, courseId) {
       const file = e.target.files[0];
       if (!file) return;
@@ -232,22 +204,20 @@
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`成功匯入 ${data.count} 筆補課名單！\n已比對學員名單並同步更新前台狀態為「已補課」。`);
+          alert(`成功匯入 ${data.count} 筆補課名單！\n備註已註記為「管理員批次匯入」。`);
           location.reload();
         } else {
           alert(data.error || data.detail || '匯入失敗，請確認檔案格式！');
         }
       } catch (err) {
-        // 若伺服器未啟動或為純靜態環境，自動降級為前端解析支援
-        parseExcelClientSide(file, courseId);
+        alert('匯入連線失敗，請檢查網路！');
       } finally {
         e.target.value = '';
       }
     }
 
-    // 刪除補課紀錄
     async function deleteMakeup(courseId, studentId, studentName) {
-      if (!confirm(`確定要刪除學員【${studentName}】的補課紀錄嗎？\n刪除後該學員在前台【🎏 課程簽到】與【📋 已完成紀錄】將不再顯示「已補課」。`)) {
+      if (!confirm(`確定要刪除學員【${studentName}】的補課紀錄嗎？\n刪除後該學員在前台將不再顯示「已補課」。`)) {
         return;
       }
 
@@ -264,21 +234,6 @@
         }
       } catch (err) {
         alert('網路連線失敗，請稍後再試！');
-      }
-    }
-
-    // 靜態備援解析（當後端 API 未連線時使用）
-    async function parseExcelClientSide(file, courseId) {
-      try {
-        const data = await file.arrayBuffer();
-        const wb = XLSX.read(data, { type: 'array' });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet);
-        if (json.length > 0) {
-          alert(`已讀取 ${json.length} 筆資料（前端模式），請確認後端 API 已連線以持久化保存。`);
-        }
-      } catch (ex) {
-        alert('解析檔案失敗，請檢查檔案格式！');
       }
     }
   </script>

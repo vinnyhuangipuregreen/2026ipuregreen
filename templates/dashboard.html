@@ -41,7 +41,7 @@
     <section class="space-y-4">
       <div>
         <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">🎏 課程簽到</h2>
-        <p class="text-xs text-gray-400 mt-0.5">請依照每堂課的開放時間完成簽到或請假</p>
+        <p class="text-xs text-gray-400 mt-0.5">請依照每堂課的開放時間完成簽到、請假或補課登錄</p>
       </div>
 
       <div class="space-y-4">
@@ -49,13 +49,15 @@
         <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
           <div class="flex justify-between items-start">
             <h3 class="font-bold text-gray-800 text-base">{{ course.title }}</h3>
-            <!-- 狀態標籤：已補課呈現藍字淺藍底 -->
+            <!-- 狀態標籤 -->
             {% if course.status == 'SIGNED_IN' %}
               <span class="px-2.5 py-0.5 bg-[#E8F5E9] text-[#2E7D32] text-xs rounded-full font-medium">已簽到</span>
             {% elif course.status == 'ON_LEAVE' %}
               <span class="px-2.5 py-0.5 bg-[#FFF3E0] text-[#E65100] text-xs rounded-full font-medium">已請假</span>
             {% elif course.status == 'MAKEUP_DONE' %}
               <span class="px-2.5 py-0.5 bg-[#E3F2FD] text-[#1565C0] text-xs rounded-full font-medium">已補課 ({{ course.makeup_date }})</span>
+            {% else %}
+              <span class="px-2.5 py-0.5 bg-gray-100 text-gray-400 text-xs rounded-full font-medium">未簽到</span>
             {% endif %}
           </div>
 
@@ -65,35 +67,237 @@
             <div>🔓 開放時間: <span class="font-medium text-gray-800">{{ course.open_time }}</span></div>
           </div>
 
-          <p class="text-[11px] text-gray-400">可先請假，簽到需等上課當天</p>
+          <p class="text-[11px] text-gray-400">若當天無法上課請先請假，請假後即可點選「補課登錄」登記補課</p>
 
-          <!-- 按鈕區塊：已補課或已請假時反灰 -->
-          <div class="grid grid-cols-2 gap-3 pt-1">
+          <!-- 三顆按鈕控制區塊：[簽到]、[請假]、[補課登錄] -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+            
+            <!-- 1. 簽到按鈕 -->
             {% if course.status == 'SIGNED_IN' %}
-              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl">✓ 已簽到</button>
-            {% elif course.status == 'MAKEUP_DONE' %}
-              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">✓ 已完成補課</button>
-            {% elif course.status == 'ON_LEAVE' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">✓ 已簽到</button>
+            {% elif course.status in ['ON_LEAVE', 'MAKEUP_DONE'] %}
               <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">簽到</button>
             {% else %}
-              <button onclick="doCheckin({{ course.id }})" class="w-full py-2.5 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl transition">簽到</button>
+              <button onclick="doCheckin({{ course.id }})" class="w-full py-2.5 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl transition shadow-xs">簽到</button>
             {% endif %}
 
-            <button onclick="doLeave({{ course.id }})" {% if course.status != 'PENDING' %}disabled{% endif %}
-              class="w-full py-2.5 rounded-xl text-sm font-medium transition {% if course.status != 'PENDING' %}bg-gray-100 text-gray-400 cursor-not-allowed{% else %}bg-[#E5A84B] hover:bg-[#d6983b] text-white{% endif %}">
-              {% if course.status == 'ON_LEAVE' %}已請假{% elif course.status == 'MAKEUP_DONE' %}已補課{% else %}請假{% endif %}
-            </button>
+            <!-- 2. 請假按鈕 -->
+            {% if course.status == 'ON_LEAVE' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">已請假</button>
+            {% elif course.status in ['SIGNED_IN', 'MAKEUP_DONE'] %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">請假</button>
+            {% else %}
+              <button onclick="doLeave({{ course.id }})" class="w-full py-2.5 bg-[#E5A84B] hover:bg-[#d6983b] text-white text-sm font-medium rounded-xl transition shadow-xs">請假</button>
+            {% endif %}
+
+            <!-- 3. 補課登錄按鈕：平時反灰，請假後才顯示藍底白字且可按 -->
+            {% if course.status == 'MAKEUP_DONE' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">✓ 已補課</button>
+            {% elif course.status == 'ON_LEAVE' %}
+              <button onclick="doMakeup({{ course.id }})" class="w-full py-2.5 bg-[#1565C0] hover:bg-[#0D47A1] text-white text-sm font-medium rounded-xl transition shadow-xs">補課登錄</button>
+            {% else %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">補課登錄</button>
+            {% endif %}
+
           </div>
         </div>
         {% endfor %}
       </div>
     </section>
 
-    <!-- 已完成紀錄 (若有補課紀錄，顯示藍字淺藍底) -->
+    <!-- 已完成紀錄 -->
     <section class="space-y-4">
       <div>
         <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">📋 已完成紀錄</h2>
-        <p class="text-xs text-gray-400 mt-0.5">每堂課的學員狀況</p>
+        <p class="text-xs text-gray-400 mt-0.5">每堂課的學員修課狀況</p>
+      </div>
+
+      <div class="space-y-2.5">
+        {% for course in courses %}
+        <div class="bg-white rounded-2xl px-6 py-4 border border-gray-100 shadow-sm flex justify-between items-center">
+          <div>
+            <div class="font-bold text-gray-800 text-sm">{{ course.title }}</div>
+            <div class="text-xs text-gray-400 mt-0.5">{{ course.course_date }}</div>
+          </div>
+          <div>
+            {% if course.status == 'SIGNED_IN' %}
+              <span class="px-3 py-1 bg-[#E8F5E9] text-[#2E7D32] text-xs rounded-full font-medium">已簽到</span>
+            {% elif course.status == 'MAKEUP_DONE' %}
+              <span class="px-3 py-1 bg-[#E3F2FD] text-[#1565C0] text-xs rounded-full font-medium">已補課</span>
+            {% elif course.status == 'ON_LEAVE' %}
+              <span class="px-3 py-1 bg-[#FFF3E0] text-[#E65100] text-xs rounded-full font-medium">已請假</span>
+            {% else %}
+              <span class為您提供修改後的完整程式碼與推送到 GitHub 的指令：
+
+---
+
+### 一、前台：`templates/dashboard.html`
+
+在 `[請假]` 按鈕旁新增 `[補課登錄]`，並設定狀態互斥連動（簽到後請假反灰；請假後補課登錄才變藍底白字可點擊；補課後即時顯示已補課）：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>學員簽到儀表板 - BLIA佛光永續學院</title>
+  <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+</head>
+<body class="min-h-screen bg-[#F8F9FA] pb-16">
+  <!-- 頂部 Header -->
+  <header class="max-w-5xl mx-auto px-4 pt-6 pb-4 flex justify-between items-start">
+    <div>
+      <span class="text-xs text-[#3B7A57] font-medium">「BLIA佛光永續學院」簽到系統</span>
+      <h1 class="text-2xl font-bold text-gray-800 mt-1">您好，{{ student.name }}</h1>
+      <p class="text-xs text-gray-400 mt-0.5">{{ student.email }}</p>
+    </div>
+    <a href="/logout" class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition inline-block">登出</a>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 space-y-8">
+    <!-- 四格統計卡片 -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.signed }}</div>
+        <div class="text-xs text-gray-500 mt-1">已簽到</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.leave }}</div>
+        <div class="text-xs text-gray-500 mt-1">已請假</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#1565C0]">{{ stats.makeup }}</div>
+        <div class="text-xs text-gray-500 mt-1">完成補課</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.absent }}</div>
+        <div class="text-xs text-gray-500 mt-1">缺課</div>
+      </div>
+    </section>
+
+    <!-- 課程簽到區塊 -->
+    <section class="space-y-4">
+      <div>
+        <h2 class="為您提供三個檔案的完整修改程式碼，以及推送到 GitHub 的指令。
+
+---
+
+### 一、前台：`templates/dashboard.html`
+
+在 `[請假]` 按鈕旁新增 `[補課登錄]` 按鈕，並設定狀態互斥：
+* 預設狀態：`[簽到]`、`[請假]` 可按；`[補課登錄]` 反灰。
+* 點擊 `[簽到]`：`[簽到]` 顯示 `✓ 已簽到` 並反灰；`[請假]` 與 `[補課登錄]` 保持反灰。
+* 點擊 `[請假]`：`[請假]` 顯示 `已請假` 並反灰；`[簽到]` 反灰；**`[補課登錄]` 變藍底白字且可點擊**。
+* 點擊 `[補課登錄]`：呼叫 API 寫入「自行登錄」，狀態切換為 `已補課`，三顆按鈕均反灰。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>學員簽到儀表板 - BLIA佛光永續學院</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#F8F9FA] pb-16">
+  <!-- 頂部 Header -->
+  <header class="max-w-5xl mx-auto px-4 pt-6 pb-4 flex justify-between items-start">
+    <div>
+      <span class="text-xs text-[#3B7A57] font-medium">「BLIA佛光永續學院」簽到系統</span>
+      <h1 class="text-2xl font-bold text-gray-800 mt-1">您好，{{ student.name }}</h1>
+      <p class="text-xs text-gray-400 mt-0.5">{{ student.email }}</p>
+    </div>
+    <a href="/logout" class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition inline-block">登出</a>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 space-y-8">
+    <!-- 統計卡片 -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.signed }}</div>
+        <div class="text-xs text-gray-500 mt-1">已簽到</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.leave }}</div>
+        <div class="text-xs text-gray-500 mt-1">已請假</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#1565C0]">{{ stats.makeup }}</div>
+        <div class="text-xs text-gray-500 mt-1">完成補課</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm text-center">
+        <div class="text-3xl font-bold text-[#3B7A57]">{{ stats.absent }}</div>
+        <div class="text-xs text-gray-500 mt-1">缺課</div>
+      </div>
+    </section>
+
+    <!-- 課程簽到區塊 -->
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">🎏 課程簽到</h2>
+        <p class="text-xs text-gray-400 mt-0.5">請依照每堂課的開放時間完成簽到、請假或補課登錄</p>
+      </div>
+
+      <div class="space-y-4">
+        {% for course in courses %}
+        <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-4">
+          <div class="flex justify-between items-start">
+            <h3 class="font-bold text-gray-800 text-base">{{ course.title }}</h3>
+            {% if course.status == 'SIGNED_IN' %}
+              <span class="px-2.5 py-0.5 bg-[#E8F5E9] text-[#2E7D32] text-xs rounded-full font-medium">已簽到</span>
+            {% elif course.status == 'ON_LEAVE' %}
+              <span class="px-2.5 py-0.5 bg-[#FFF3E0] text-[#E65100] text-xs rounded-full font-medium">已請假</span>
+            {% elif course.status == 'MAKEUP_DONE' %}
+              <span class="px-2.5 py-0.5 bg-[#E3F2FD] text-[#1565C0] text-xs rounded-full font-medium">已補課 ({{ course.makeup_date }})</span>
+            {% else %}
+              <span class="px-2.5 py-0.5 bg-gray-100 text-gray-400 text-xs rounded-full font-medium">未簽到</span>
+            {% endif %}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-[#F8F9FA] p-3 rounded-xl text-xs text-gray-600">
+            <div>📅 課程日期: <span class="font-medium text-gray-800">{{ course.course_date }}</span></div>
+            <div>🕒 課程時間: <span class="font-medium text-gray-800">{{ course.course_time }}</span></div>
+            <div>🔓 開放時間: <span class="font-medium text-gray-800">{{ course.open_time }}</span></div>
+          </div>
+
+          <!-- 按鈕區塊：[簽到]、[請假]、[補課登錄] -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+            <!-- 1. 簽到按鈕 -->
+            {% if course.status == 'SIGNED_IN' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">✓ 已簽到</button>
+            {% elif course.status in ['ON_LEAVE', 'MAKEUP_DONE'] %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">簽到</button>
+            {% else %}
+              <button onclick="doCheckin({{ course.id }})" class="w-full py-2.5 bg-[#3B7A57] hover:bg-[#316648] text-white text-sm font-medium rounded-xl transition">簽到</button>
+            {% endif %}
+
+            <!-- 2. 請假按鈕 -->
+            {% if course.status == 'ON_LEAVE' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">已請假</button>
+            {% elif course.status in ['SIGNED_IN', 'MAKEUP_DONE'] %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">請假</button>
+            {% else %}
+              <button onclick="doLeave({{ course.id }})" class="w-full py-2.5 bg-[#E5A84B] hover:bg-[#d6983b] text-white text-sm font-medium rounded-xl transition">請假</button>
+            {% endif %}
+
+            <!-- 3. 補課登錄按鈕 -->
+            {% if course.status == 'MAKEUP_DONE' %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">✓ 已補課</button>
+            {% elif course.status == 'ON_LEAVE' %}
+              <button onclick="doMakeup({{ course.id }})" class="w-full py-2.5 bg-[#1565C0] hover:bg-[#0D47A1] text-white text-sm font-medium rounded-xl transition shadow-xs">補課登錄</button>
+            {% else %}
+              <button disabled class="w-full py-2.5 bg-gray-100 text-gray-400 text-sm font-medium rounded-xl cursor-not-allowed">補課登錄</button>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- 已完成紀錄 -->
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-gray-800 flex items-center gap-1.5">📋 已完成紀錄</h2>
+        <p class="text-xs text-gray-400 mt-0.5">每堂課的學員修課狀況</p>
       </div>
 
       <div class="space-y-2.5">
@@ -141,6 +345,22 @@
       });
       if (res.ok) location.reload();
       else alert('請假申請失敗');
+    }
+
+    async function doMakeup(cid) {
+      if (!confirm('確定要登錄本堂課的補課紀錄嗎？登錄後將更新為「已補課」。')) return;
+      const res = await fetch('/api/attendance/makeup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ course_id: cid })
+      });
+      if (res.ok) {
+        alert('補課登錄成功！');
+        location.reload();
+      } else {
+        const err = await res.json();
+        alert(err.detail || '補課登錄失敗');
+      }
     }
   </script>
 </body>
