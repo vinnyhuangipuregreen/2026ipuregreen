@@ -50,7 +50,7 @@
           <span class="flex items-center gap-1.5">
             <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10" stroke-width="2"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
+              <polyline points="12 6 12 12 16 14" stroke-width="2"></polyline>
             </svg>
             課程時間: 18:00-22:00
           </span>
@@ -78,7 +78,6 @@
             <circle cx="11" cy="11" r="8" stroke-width="2"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2"></line>
           </svg>
-          <!-- 1. 正式由「學員補課名冊複合查詢」改成「學員補課名單複合查詢」 -->
           <h2 class="text-base sm:text-lg font-bold text-slate-800">
             學員補課名單複合查詢 
             <span class="text-xs sm:text-sm font-normal text-slate-400 ml-1">
@@ -88,7 +87,7 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
-          <!-- 2. 「📥 匯入 Excel/CSV」名稱正式改為「📥 匯入 Excel」 -->
+          <!-- 📥 匯入 Excel 按鈕 -->
           <label class="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl shadow-2xs transition-all cursor-pointer">
             <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
@@ -97,7 +96,7 @@
             <input type="file" id="excelUploadInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
           </label>
 
-          <!-- 3. 旁邊增加「📥 下載範例Excel」按鈕 (可下載 pathdemy_list_upload.xlsx) -->
+          <!-- 📥 下載範例Excel 按鈕 -->
           <a href="/api/admin/pathdemy/sample-excel" download="pathdemy_list_upload.xlsx" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1565C0] text-sm font-semibold rounded-xl shadow-2xs transition-all cursor-pointer">
             <span>📥</span>
             <span>下載範例Excel</span>
@@ -184,7 +183,7 @@
           <p class="text-xs text-slate-400">請點擊右上角「📥 匯入 Excel」上傳 Pathdemy 補課名單檔案</p>
         </div>
 
-        <!-- 補課清單表格 -->
+        <!-- 補課清單表格 (透過 Email(補課平台) 比對學員名單補齊：學員姓名、Email、聯絡電話) -->
         <div id="tableWrapper" class="hidden overflow-hidden rounded-xl border border-slate-200">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
@@ -199,7 +198,7 @@
                 </tr>
               </thead>
               <tbody id="makeupTableBody" class="divide-y divide-slate-100 bg-white">
-                <!-- 動態注入補課學員資料列 -->
+                <!-- 動態注入補齊資料後的補課學員列 -->
               </tbody>
             </table>
           </div>
@@ -279,24 +278,55 @@
     </div>
   </div>
 
+  <!-- 伺服器傳遞之學員名單 JSON (若由 FastAPI Jinja2 渲染時注入) -->
+  <script id="serverStudentsData" type="application/json">
+    {% if all_students %}{{ all_students | tojson }}{% else %}[]{% endif %}
+  </script>
+
   <script>
-    // 預設學員白名單資料庫
-    const SYSTEM_STUDENTS = [
-      {
-        id: 1,
-        name: "黃雅筠",
-        email: "vinnyhuang.ipuregreen@gmail.com",
-        platform_email: "vinnyhuang168@gmail.com", // Pathdemy 補課平台 Email
-        phone: "0912345678"
-      },
-      {
-        id: 2,
-        name: "林小明",
-        email: "ming@example.com",
-        platform_email: "ming@example.com",
-        phone: "0987654321"
-      }
-    ];
+    // 動態載入最新學員名單 (與後台學員名單維護完全同步)
+    let systemStudents = [];
+
+    function loadSystemStudents() {
+      // 1. 優先從 localStorage 讀取最新學員名冊 (學員名單維護同步儲存的 blia_students)
+      try {
+        const stored = JSON.parse(localStorage.getItem('blia_students') || '[]');
+        if (Array.isArray(stored) && stored.length > 0) {
+          systemStudents = stored;
+          return;
+        }
+      } catch (e) {}
+
+      // 2. 嘗試從後端 Jinja 模板注入的 JSON 讀取
+      try {
+        const scriptData = document.getElementById('serverStudentsData');
+        if (scriptData && scriptData.textContent.trim()) {
+          const parsed = JSON.parse(scriptData.textContent);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            systemStudents = parsed;
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // 3. 預設備援學員名冊
+      systemStudents = [
+        {
+          id: 1,
+          name: "黃雅筠",
+          email: "vinnyhuang.ipuregreen@gmail.com",
+          email_pathdemy: "vinnyhuang168@gmail.com",
+          phone: "0912345678"
+        },
+        {
+          id: 2,
+          name: "林小明",
+          email: "ming@example.com",
+          email_pathdemy: "ming@example.com",
+          phone: "0987654321"
+        }
+      ];
+    }
 
     // 本頁面補課清單狀態 (以 Course ID 1 為主)
     let makeupRecords = [];
@@ -304,12 +334,14 @@
 
     // 初始化載入
     document.addEventListener("DOMContentLoaded", () => {
+      loadSystemStudents();
       loadStorageData();
       renderAll();
     });
 
-    // 從 LocalStorage 讀取已存紀錄
+    // 從 LocalStorage 讀取已存紀錄，並自動比對學員名單補齊欄位
     function loadStorageData() {
+      loadSystemStudents();
       try {
         const saved = localStorage.getItem("blia_makeup_records_course_1");
         if (saved) {
@@ -320,6 +352,26 @@
       } catch (e) {
         makeupRecords = [];
       }
+
+      // 自動比對補齊既有資料中未補上的學員姓名、Email、聯絡電話
+      makeupRecords.forEach(rec => {
+        if (!rec.student_id || rec.student_name === '外部未登記學員' || rec.email === '-' || rec.phone === '-') {
+          const targetEmail = String(rec.platform_email || '').trim().toLowerCase();
+          const matched = systemStudents.find(s => {
+            const sPathdemy = String(s.email_pathdemy || s.platform_email || '').trim().toLowerCase();
+            const sEmail = String(s.email || '').trim().toLowerCase();
+            return (sPathdemy && sPathdemy === targetEmail) || 
+                   (sEmail && sEmail === targetEmail) || 
+                   (targetEmail.startsWith('vinnyhuang') && s.name === '黃雅筠');
+          });
+          if (matched) {
+            rec.student_id = matched.id;
+            rec.student_name = matched.name;
+            rec.email = matched.email;
+            rec.phone = matched.phone;
+          }
+        }
+      });
     }
 
     // 儲存補課資料至 LocalStorage，並同步更新前台狀態與課程清單
@@ -360,7 +412,7 @@
 
       localStorage.setItem("blia_attendances", JSON.stringify(attendances));
 
-      // 同步前台課程清單
+      // 同步更新前台課程清單之狀態與快取
       let courses = [
         {
           id: 1,
@@ -392,7 +444,7 @@
     }
 
     // ==========================================
-    // 4. Excel 檔案解析與欄位格式校驗 (核心功能：符合 pathdemy_list_upload.xlsx)
+    // Excel 檔案解析與欄位格式校驗 (透過 Email(補課平台) 比對學員名單補齊資訊)
     // ==========================================
     async function handleFileUpload(event) {
       const file = event.target.files[0];
@@ -463,23 +515,31 @@
 
           if (!rowPlatformEmail) continue;
 
-          // 核心：比對學員名單白名單
-          const matchedStudent = SYSTEM_STUDENTS.find(s => {
-            const pe1 = (s.platform_email || '').toLowerCase();
-            const e1 = (s.email || '').toLowerCase();
-            const target = rowPlatformEmail.toLowerCase();
-            return pe1 === target || e1 === target || (target.startsWith('vinnyhuang') && s.name === '黃雅筠');
+          // 核心功能：透過 [Email(補課平台)] 去比對 [學員名單]
+          const targetEmail = rowPlatformEmail.toLowerCase();
+          const matchedStudent = systemStudents.find(s => {
+            const sPathdemy = String(s.email_pathdemy || s.platform_email || '').trim().toLowerCase();
+            const sEmail = String(s.email || '').trim().toLowerCase();
+            return (sPathdemy && sPathdemy === targetEmail) || 
+                   (sEmail && sEmail === targetEmail) || 
+                   (targetEmail.startsWith('vinnyhuang') && s.name === '黃雅筠');
           });
 
-          const exists = makeupRecords.find(r => r.platform_email.toLowerCase() === rowPlatformEmail.toLowerCase());
+          const exists = makeupRecords.find(r => r.platform_email.toLowerCase() === targetEmail);
 
+          // 比對後自動補上 [學員姓名]、[Email]、[聯絡電話]
           const record = {
             id: exists ? exists.id : `makeup_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
             student_id: matchedStudent ? matchedStudent.id : null,
+            // 補上學員姓名
             student_name: matchedStudent ? matchedStudent.name : '外部未登記學員',
+            // 補上學員主要 Email
             email: matchedStudent ? matchedStudent.email : '-',
+            // 補課平台 Email
             platform_email: rowPlatformEmail,
+            // 補上學員聯絡電話
             phone: matchedStudent ? matchedStudent.phone : '-',
+            // 補課時間
             makeup_time: rowDate
           };
 
@@ -508,7 +568,7 @@
         saveStorageData();
         renderAll();
 
-        alert(`🎉 成功匯入完成！共處理 ${sheetRows.length - 1} 筆資料，成功比對學員名單 ${matchedCount} 筆。\n已將補課紀錄即時同步至前台課程清單！`);
+        alert(`🎉 成功匯入完成！共處理 ${sheetRows.length - 1} 筆資料，成功比對學員名單 ${matchedCount} 筆。\n已透過「Email(補課平台)」比對學員名單，成功補上【學員姓名】、【Email】與【聯絡電話】！\n前台課程清單亦已同步更新。`);
         showToast('🎉 成功匯入完成！前台課程清單已即時同步已補課狀態。', 'success');
       } catch (err) {
         console.error(err);
@@ -591,7 +651,7 @@
           <tr class="hover:bg-slate-50/70 transition-colors">
             <td class="py-3.5 px-4 font-bold text-slate-800 flex items-center gap-2">
               <span>${escapeHtml(rec.student_name)}</span>
-              ${rec.student_id ? '<span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">正式學員</span>' : '<span class="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-500 rounded-md">未比對</span>'}
+              ${rec.student_id ? '<span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">正式學員</span>' : '<span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200 rounded-md">外部未登記學員</span>'}
             </td>
             <td class="py-3.5 px-4 text-slate-600 font-mono text-xs">${escapeHtml(rec.email)}</td>
             <td class="py-3.5 px-4 font-mono text-xs text-blue-700 font-semibold">${escapeHtml(rec.platform_email)}</td>

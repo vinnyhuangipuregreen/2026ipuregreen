@@ -537,8 +537,11 @@ async def course_pathdemy_page(course_id: int, request: Request):
         rec = db["attendances"].get(key)
         if rec and rec.get("status") == "MAKEUP_DONE":
             makeup_records.append({
-                "id": s["id"], "name": s["name"], "email": s["email"],
-                "email_pathdemy": s.get("email_pathdemy", s["email"]), "phone": s["phone"],
+                "id": s["id"], 
+                "name": s["name"], 
+                "email": s["email"],
+                "email_pathdemy": rec.get("platform_email") or s.get("email_pathdemy", s["email"]), 
+                "phone": s["phone"],
                 "makeup_date": rec.get("makeup_date", "-"),
                 "note": rec.get("note", "管理員批次匯入"),
                 "imported_by": rec.get("imported_by", "")
@@ -547,7 +550,7 @@ async def course_pathdemy_page(course_id: int, request: Request):
         "course": course, "records": makeup_records, "total_count": len(makeup_records), "all_students": db["students"]
     })
 
-# 3.3 匯入補課 Excel 並嚴格比對欄位格式 (檢查少了或多了欄位，匯入後同步前台)
+# 3.3 匯入補課 Excel 並透過 [Email(補課平台)] 比對 [學員名單] 補齊資訊，匯入後同步前台
 @app.post("/api/admin/courses/{course_id}/pathdemy/import")
 async def import_pathdemy_excel(course_id: int, request: Request, file: UploadFile = File(...)):
     admin = get_current_admin(request)
@@ -616,12 +619,24 @@ async def import_pathdemy_excel(course_id: int, request: Request, file: UploadFi
         if not raw_email or "@" not in raw_email:
             continue
 
-        matched = next((s for s in db["students"] if raw_email in [(s.get("email_pathdemy") or "").lower(), s["email"].lower()] or (raw_email.startswith("vinnyhuang") and s.get("name") == "黃雅筠")), None)
+        # 透過 [Email(補課平台)] 比對學員名單
+        matched = next((
+            s for s in db["students"] 
+            if raw_email in [
+                (s.get("email_pathdemy") or "").strip().lower(), 
+                s["email"].strip().lower()
+            ] or (raw_email.startswith("vinnyhuang") and s.get("name") == "黃雅筠")
+        ), None)
+
         if matched:
+            # 比對成功補上 [學員姓名]、[Email]、[聯絡電話]
             db["attendances"][f"{matched['id']}_{course_id}"] = {
                 "status": "MAKEUP_DONE",
                 "makeup_date": raw_date,
                 "platform_email": raw_email,
+                "student_name": matched["name"],
+                "student_email": matched["email"],
+                "student_phone": matched["phone"],
                 "note": "管理員批次匯入",
                 "imported_by": admin["email"],
                 "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
