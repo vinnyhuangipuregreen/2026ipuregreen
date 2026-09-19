@@ -9,7 +9,7 @@
 <body class="min-h-screen bg-[#F4F6F8] flex items-center justify-center p-4">
   <div class="w-full max-w-[420px] bg-white rounded-[32px] shadow-sm border border-gray-100 p-8 sm:p-10 flex flex-col items-center">
     
-    <!-- 頂部 iPure Green 綠色樹狀 Logo (依圖一完整還原) -->
+    <!-- 頂部 iPure Green 綠色樹狀 Logo -->
     <div class="flex flex-col items-center mb-6">
       <svg class="w-16 h-16" viewBox="0 0 48 48" fill="none">
         <circle cx="24" cy="14" r="4.5" fill="#4CAF50" />
@@ -25,7 +25,7 @@
       <span class="text-[#8D6E63] font-serif italic text-lg tracking-wide mt-1">iPure Green</span>
     </div>
 
-    <!-- 系統標題 (對應圖一) -->
+    <!-- 系統標題 -->
     <h1 class="text-2xl font-bold text-[#1B4332] mb-1.5 text-center tracking-tight">
       「BLIA佛光永續學院」簽到系統
     </h1>
@@ -36,7 +36,7 @@
     <!-- 錯誤訊息提示區塊 -->
     <div id="errorMsg" class="hidden w-full mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-xl border border-red-200 text-center"></div>
 
-    <!-- 學員登入表單 (對應圖一) -->
+    <!-- 學員登入表單 -->
     <form id="loginForm" class="w-full space-y-4">
       <div>
         <label class="block text-gray-700 font-semibold text-sm mb-1.5">學員 Email</label>
@@ -60,16 +60,16 @@
         >
       </div>
 
-      <!-- 綠色登入按鈕 -->
+      <!-- 登入按鈕 -->
       <button 
         type="submit" 
         id="submitBtn"
-        class="w-full mt-2 bg-[#3B7A57] hover:bg-[#2D6A4F] text-white py-3.5 rounded-2xl font-medium text-base shadow-sm transition duration-150 active:scale-[0.99]"
+        class="w-full mt-2 bg-[#3B7A57] hover:bg-[#2D6A4F] text-white py-3.5 rounded-2xl font-medium text-base shadow-sm transition duration-150 active:scale-[0.99] cursor-pointer"
       >
         登入
       </button>
 
-      <!-- 底部切換至後台入口 -->
+      <!-- 底部管理者入口連結 -->
       <div class="text-center pt-3">
         <a href="/admin/login" class="text-xs text-gray-400 hover:text-[#3B7A57] transition">
           切換至後台管理者登入 →

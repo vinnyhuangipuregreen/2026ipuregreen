@@ -31,6 +31,17 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 UPLOAD_DIR = BASE_DIR / "uploadfile"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# 跨版本相容模板渲染函式 (同時相容新舊版 Starlette / FastAPI，徹底解決 500 Internal Server Error)
+def render_template(template_name: str, context: dict, request: Request, status_code: int = 200):
+    ctx = dict(context) if context else {}
+    ctx["request"] = request
+    try:
+        # 新版 Starlette (0.28.0+)
+        return templates.TemplateResponse(request=request, name=template_name, context=ctx, status_code=status_code)
+    except TypeError:
+        # 標準與舊版 Starlette (以 name, context 作為位置參數)
+        return templates.TemplateResponse(template_name, ctx, status_code=status_code)
+
 SECRET_KEY = os.getenv("SECRET_KEY", "ipuregreen-blia-secret-key-2026")
 
 # 資料庫模型
@@ -115,7 +126,7 @@ async def login_page(request: Request):
         student = get_current_student(request)
         if student:
             return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse(request=request, name="login.html", context={})
+    return render_template("login.html", {}, request)
 
 @app.get("/logout")
 async def logout():
@@ -141,10 +152,9 @@ async def dashboard_page(request: Request):
         makeup_date = record.get("makeup_date", "") if record else ""
         courses_view.append({**c, "status": status, "makeup_date": makeup_date})
 
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={
+    return render_template(
+        "dashboard.html",
+        {
             "student": student,
             "stats": {
                 "signed": signed_count,
@@ -153,7 +163,8 @@ async def dashboard_page(request: Request):
                 "absent": absent_count
             },
             "courses": courses_view
-        }
+        },
+        request
     )
 
 @app.get("/api/auth/logout")
@@ -232,7 +243,7 @@ async def api_makeup(request: Request):
 async def admin_login_page(request: Request):
     if get_current_admin(request):
         return RedirectResponse(url="/admin", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_login.html", context={})
+    return render_template("admin_login.html", {}, request)
 
 @app.post("/api/admin/auth/login")
 async def admin_login(email: str = Form(...), password: str = Form(...)):
@@ -258,15 +269,15 @@ async def admin_page(request: Request):
     current_admin = get_current_admin(request)
     if not current_admin:
         return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(
-        request=request,
-        name="admin.html",
-        context={
+    return render_template(
+        "admin.html",
+        {
             "admins": db["admins"],
             "students": db["students"],
             "courses": db["courses"],
             "current_admin": current_admin
-        }
+        },
+        request
     )
 
 # ==========================================
@@ -546,9 +557,16 @@ async def course_pathdemy_page(course_id: int, request: Request):
                 "note": rec.get("note", "管理員批次匯入"),
                 "imported_by": rec.get("imported_by", "")
             })
-    return templates.TemplateResponse(request=request, name="course_pathdemy.html", context={
-        "course": course, "records": makeup_records, "total_count": len(makeup_records), "all_students": db["students"]
-    })
+    return render_template(
+        "course_pathdemy.html",
+        {
+            "course": course,
+            "records": makeup_records,
+            "total_count": len(makeup_records),
+            "all_students": db["students"]
+        },
+        request
+    )
 
 # 3.3 匯入補課 Excel (嚴格只針對選擇的該堂課程匯入，不影響其他課程)
 @app.post("/api/admin/courses/{course_id}/pathdemy/import")
@@ -678,10 +696,17 @@ async def course_attendance_page(course_id: int, request: Request):
             "email_pathdemy": s.get("email_pathdemy", s["email"]), "phone": s["phone"],
             "status": status, "signed_at": rec.get("signed_at", "-") if rec else "-"
         })
-    return templates.TemplateResponse(request=request, name="course_attendance.html", context={
-        "course": course, "records": student_records, "signed_count": signed_count,
-        "not_signed_count": len(student_records) - signed_count, "total_count": len(student_records)
-    })
+    return render_template(
+        "course_attendance.html",
+        {
+            "course": course,
+            "records": student_records,
+            "signed_count": signed_count,
+            "not_signed_count": len(student_records) - signed_count,
+            "total_count": len(student_records)
+        },
+        request
+    )
 
 @app.get("/admin/courses/{course_id}/leaves", response_class=HTMLResponse)
 async def course_leaves_page(course_id: int, request: Request):
@@ -699,9 +724,15 @@ async def course_leaves_page(course_id: int, request: Request):
                 "email_pathdemy": s.get("email_pathdemy", s["email"]), "phone": s["phone"],
                 "reason": rec.get("reason", "未填寫"), "updated_at": rec.get("updated_at", "-")
             })
-    return templates.TemplateResponse(request=request, name="course_leaves.html", context={
-        "course": course, "records": leave_records, "total_count": len(leave_records)
-    })
+    return render_template(
+        "course_leaves.html",
+        {
+            "course": course,
+            "records": leave_records,
+            "total_count": len(leave_records)
+        },
+        request
+    )
 
 @app.delete("/api/admin/courses/{course_id}/leaves/{student_id}")
 async def cancel_leave(course_id: int, student_id: int, request: Request):
