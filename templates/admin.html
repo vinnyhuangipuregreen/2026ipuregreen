@@ -110,14 +110,14 @@
                 + 新增學員
               </button>
 
-              <!-- 1. 按鈕更名為：📥 匯入 Excel -->
+              <!-- 匯入 Excel -->
               <label class="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-semibold rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer">
                 <span class="text-red-500 text-sm">📥</span>
                 <span>匯入 Excel</span>
                 <input type="file" id="studentExcelInput" accept=".xlsx, .xls" class="hidden" onchange="uploadStudentExcel(event)">
               </label>
 
-              <!-- 2. 旁邊增加：📥 下載範例Excel -->
+              <!-- 下載範例 Excel -->
               <a href="/api/admin/students/sample-excel" download="student_list_upload.xlsx" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1565C0] text-xs font-semibold rounded-xl shadow-xs transition flex items-center gap-1.5">
                 <span>📥</span>
                 <span>下載範例Excel</span>
@@ -163,15 +163,23 @@
               <span>📚 課程清單維護</span>
               <span class="text-xs text-gray-400 font-normal">共 {{ courses|length }} 堂課程</span>
             </h3>
-            <div class="flex items-center gap-2.5">
+            <div class="flex items-center gap-2.5 flex-wrap">
               <button onclick="openCourseModal()" class="px-3.5 py-2 bg-[#3B7A57] hover:bg-[#2D6A4F] text-white text-xs font-semibold rounded-xl shadow-xs transition">
                 + 新增課程
               </button>
+
+              <!-- 1. 名稱由「📥 匯入課程」改為「📥 匯入 Excel」 -->
               <label class="px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-semibold rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer">
-                <span>📥</span>
-                <span>匯入課程</span>
-                <input type="file" accept=".xlsx, .xls, .csv" class="hidden" onchange="uploadCourseExcel(event)">
+                <span class="text-red-500 text-sm">📥</span>
+                <span>匯入 Excel</span>
+                <input type="file" id="courseExcelInput" accept=".xlsx, .xls" class="hidden" onchange="uploadCourseExcel(event)">
               </label>
+
+              <!-- 2. 旁邊增加「📥 下載範例Excel」按鈕 -->
+              <a href="/api/admin/courses/sample-excel" download="course_list_upload.xlsx" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1565C0] text-xs font-semibold rounded-xl shadow-xs transition flex items-center gap-1.5">
+                <span>📥</span>
+                <span>下載範例Excel</span>
+              </a>
             </div>
           </div>
 
@@ -243,7 +251,37 @@
     </div>
   </div>
 
-  <!-- 修改個人密碼 Modal -->
+  <!-- 課程 Modal -->
+  <div id="courseModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-lg space-y-4">
+      <h3 id="courseModalTitle" class="text-lg font-bold text-gray-800">新增課程</h3>
+      <input type="hidden" id="modalCourseId">
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">課程名稱</label>
+          <input type="text" id="modalCourseTitle" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">課程日期 (例如 2026/09/15)</label>
+          <input type="text" id="modalCourseDate" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">課程時間 (例如 18:00-22:00)</label>
+          <input type="text" id="modalCourseTime" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-600 mb-1">開放簽到時間 (例如 2026-09-15 18:00:00)</label>
+          <input type="text" id="modalCourseOpenTime" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeCourseModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
+        <button onclick="saveCourse()" class="px-4 py-2 bg-[#3B7A57] text-white text-sm font-medium rounded-xl">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 修改密碼 Modal -->
   <div id="pwdModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-lg space-y-4">
       <h3 class="text-lg font-bold text-gray-800">修改個人密碼</h3>
@@ -293,38 +331,8 @@
     </div>
   </div>
 
-  <!-- 課程 Modal -->
-  <div id="courseModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-lg space-y-4">
-      <h3 id="courseModalTitle" class="text-lg font-bold text-gray-800">新增課程</h3>
-      <input type="hidden" id="modalCourseId">
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">課程名稱</label>
-          <input type="text" id="modalCourseTitle" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">課程日期 (例如 2026/09/15)</label>
-          <input type="text" id="modalCourseDate" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">課程時間 (例如 18:00-22:00)</label>
-          <input type="text" id="modalCourseTime" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
-        </div>
-        <div>
-          <label class="block font-semibold text-gray-600 mb-1">開放簽到時間 (例如 2026-09-15 18:00:00)</label>
-          <input type="text" id="modalCourseOpenTime" required class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm">
-        </div>
-      </div>
-      <div class="flex justify-end gap-2 pt-2">
-        <button onclick="closeCourseModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-xl">取消</button>
-        <button onclick="saveCourse()" class="px-4 py-2 bg-[#3B7A57] text-white text-sm font-medium rounded-xl">儲存</button>
-      </div>
-    </div>
-  </div>
-
   <script>
-    // 頁籤切換邏輯
+    // 頁籤切換
     function switchTab(tabId) {
       const panels = {
         'admins': document.getElementById('panel-admins'),
@@ -359,7 +367,7 @@
       switchTab(savedTab);
     });
 
-    // 學員 Excel 匯入與格式檢驗（少了或多了欄位即時提示，成功同步前台）
+    // 1. 學員 Excel 匯入校驗
     async function uploadStudentExcel(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -368,10 +376,7 @@
       formData.append('file', file);
 
       try {
-        const res = await fetch('/api/admin/students/import', { 
-          method: 'POST', 
-          body: formData 
-        });
+        const res = await fetch('/api/admin/students/import', { method: 'POST', body: formData });
         const data = await res.json();
 
         if (res.ok && data.success) {
@@ -384,7 +389,35 @@
           alert(data.error || data.detail || '匯入失敗，請確認檔案欄位格式！');
         }
       } catch (err) {
-        alert('連線失敗，請檢查伺服器是否正常運行！');
+        alert('連線失敗，請檢查伺服器狀態！');
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    // 2. 課程 Excel 匯入校驗（少了或多了欄位即時提示，成功同步前台）
+    async function uploadCourseExcel(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/admin/courses/import', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          if (data.courses) {
+            try { localStorage.setItem('blia_courses', JSON.stringify(data.courses)); } catch(err) {}
+          }
+          alert(`🎉 成功匯入 ${data.count} 筆課程資料！\n課程清單已即時同步至前台學員儀表板。`);
+          location.reload();
+        } else {
+          alert(data.error || data.detail || '匯入失敗，請確認檔案欄位格式！');
+        }
+      } catch (err) {
+        alert('連線失敗，請檢查伺服器狀態！');
       } finally {
         e.target.value = '';
       }
@@ -430,7 +463,7 @@
       else alert('刪除失敗');
     }
 
-    // 課程操作
+    // 課程 CRUD
     function openCourseModal() {
       document.getElementById('modalCourseId').value = '';
       document.getElementById('modalCourseTitle').value = '';
@@ -467,16 +500,6 @@
       if (!confirm('確定刪除此課程？')) return;
       const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
       if (res.ok) location.reload();
-    }
-    async function uploadCourseExcel(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/admin/courses/import', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (res.ok) { alert(`成功匯入 ${data.count} 筆課程！`); location.reload(); }
-      else alert(data.detail || '匯入失敗');
     }
 
     // 管理者帳號操作

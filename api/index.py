@@ -256,10 +256,8 @@ async def admin_page(request: Request):
     )
 
 # ==========================================
-# 學員名單管理：範本下載 & Excel 匯入與欄位格式校驗
+# 學員名單管理：範本下載 & Excel 匯入校驗
 # ==========================================
-
-# 1. 下載範例 Excel 檔案 (C:\0-Python\2026ipuregreen\uploadfile\student_list_upload.xlsx)
 @app.get("/api/admin/students/sample-excel")
 async def download_student_sample_excel(request: Request):
     if not get_current_admin(request):
@@ -268,7 +266,6 @@ async def download_student_sample_excel(request: Request):
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     sample_file = UPLOAD_DIR / "student_list_upload.xlsx"
     
-    # 若檔案不存在，自動生成標準格式範例檔
     if not sample_file.exists():
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -284,7 +281,6 @@ async def download_student_sample_excel(request: Request):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-# 2. 匯入學員 Excel 並嚴格檢查欄位是否符合範例格式
 @app.post("/api/admin/students/import")
 async def import_students(request: Request, file: UploadFile = File(...)):
     if not get_current_admin(request):
@@ -306,7 +302,6 @@ async def import_students(request: Request, file: UploadFile = File(...)):
     if not rows or len(rows) < 1:
         return JSONResponse(status_code=400, content={"error": "上傳的 Excel 檔案為空，請確認內容！"})
 
-    # 讀取標準範例檔案欄位清單
     sample_file = UPLOAD_DIR / "student_list_upload.xlsx"
     expected_headers = ["學員姓名", "Email", "Email(補課平台)", "聯絡電話"]
     if sample_file.exists():
@@ -319,10 +314,8 @@ async def import_students(request: Request, file: UploadFile = File(...)):
         except:
             pass
 
-    # 取得上傳檔案的第一列標題
     uploaded_headers = [str(col).strip() for col in rows[0] if col is not None and str(col).strip()]
 
-    # 嚴格比對：檢查缺欄與多欄
     missing_fields = [h for h in expected_headers if h not in uploaded_headers]
     extra_fields = [h for h in uploaded_headers if h not in expected_headers]
 
@@ -344,17 +337,14 @@ async def import_students(request: Request, file: UploadFile = File(...)):
     def cell_to_str(val): return str(val).strip() if val is not None else ""
 
     for r in rows[1:]:
-        if not any(r):
-            continue
+        if not any(r): continue
         name = cell_to_str(r[name_idx]) if len(r) > name_idx else ""
         email = cell_to_str(r[email_idx]) if len(r) > email_idx else ""
         email_pathdemy = cell_to_str(r[pathdemy_idx]) if len(r) > pathdemy_idx else ""
         phone = cell_to_str(r[phone_idx]) if len(r) > phone_idx else ""
 
-        if not name or not email:
-            continue
-        if not email_pathdemy:
-            email_pathdemy = email
+        if not name or not email: continue
+        if not email_pathdemy: email_pathdemy = email
 
         existing = next((s for s in db["students"] if s["email"].lower() == email.lower()), None)
         if existing:
@@ -364,11 +354,8 @@ async def import_students(request: Request, file: UploadFile = File(...)):
         else:
             new_id = max([s["id"] for s in db["students"]], default=0) + 1
             db["students"].append({
-                "id": new_id, 
-                "name": name, 
-                "email": email, 
-                "email_pathdemy": email_pathdemy, 
-                "phone": phone
+                "id": new_id, "name": name, "email": email, 
+                "email_pathdemy": email_pathdemy, "phone": phone
             })
         imported_count += 1
 
@@ -379,7 +366,129 @@ async def import_students(request: Request, file: UploadFile = File(...)):
     }
 
 # ==========================================
-# 補課與後台其他路由
+# 課程清單管理：範本下載 & Excel 匯入校驗 (符合 course_list_upload.xlsx)
+# ==========================================
+
+# 1. 下載課程範例 Excel 檔案
+@app.get("/api/admin/courses/sample-excel")
+async def download_course_sample_excel(request: Request):
+    if not get_current_admin(request):
+        raise HTTPException(status_code=401, detail="未授權")
+    
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    sample_file = UPLOAD_DIR / "course_list_upload.xlsx"
+    
+    # 若檔案不存在，自動生成標準格式範例檔
+    if not sample_file.exists():
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "課程清單"
+        ws.append(["課程名稱", "課程日期", "課程時間", "開放時間"])
+        ws.append(["導論：自然永續的核心觀念與倫理基礎", "2026/09/15", "18:00-22:00", "2026-09-15 18:00:00"])
+        ws.append(["健康一體（One Health）與系統思維", "2026/09/22", "18:30-21:30", "2026-09-22 18:00:00"])
+        wb.save(str(sample_file))
+        
+    return FileResponse(
+        path=str(sample_file),
+        filename="course_list_upload.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+# 2. 匯入課程 Excel 並嚴格比對欄位格式 (檢查少了或多了欄位，成功同步前台)
+@app.post("/api/admin/courses/import")
+async def import_courses(request: Request, file: UploadFile = File(...)):
+    if not get_current_admin(request):
+        raise HTTPException(status_code=401, detail="未授權")
+    
+    contents = await file.read()
+    filename = file.filename.lower()
+
+    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
+        return JSONResponse(status_code=400, content={"error": "上傳失敗！僅支援 Excel 檔案格式 (.xlsx 或 .xls)"})
+
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+        sheet = wb.active
+        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": f"Excel 檔案讀取失敗：{str(e)}"})
+
+    if not rows or len(rows) < 1:
+        return JSONResponse(status_code=400, content={"error": "上傳的 Excel 檔案為空，請確認內容！"})
+
+    sample_file = UPLOAD_DIR / "course_list_upload.xlsx"
+    expected_headers = ["課程名稱", "課程日期", "課程時間", "開放時間"]
+    if sample_file.exists():
+        try:
+            s_wb = openpyxl.load_workbook(str(sample_file), data_only=True)
+            s_ws = s_wb.active
+            s_row = [str(cell.value).strip() for cell in s_ws[1] if cell.value is not None and str(cell.value).strip()]
+            if s_row:
+                expected_headers = s_row
+        except:
+            pass
+
+    uploaded_headers = [str(col).strip() for col in rows[0] if col is not None and str(col).strip()]
+
+    # 嚴格比對：檢查缺欄與多欄
+    missing_fields = [h for h in expected_headers if h not in uploaded_headers]
+    extra_fields = [h for h in uploaded_headers if h not in expected_headers]
+
+    if missing_fields or extra_fields:
+        err_msg = "匯入失敗！欄位格式不符合範例檔案 (course_list_upload.xlsx)：\n"
+        if missing_fields:
+            err_msg += f"❌ 缺少必要欄位：【{', '.join(missing_fields)}】\n"
+        if extra_fields:
+            err_msg += f"⚠️ 多出未定義欄位：【{', '.join(extra_fields)}】\n"
+        err_msg += f"👉 標準欄位格式為：【{', '.join(expected_headers)}】\n請點擊旁邊「📥 下載範例Excel」核對格式後重新上傳。"
+        return JSONResponse(status_code=400, content={"error": err_msg})
+
+    title_idx = uploaded_headers.index("課程名稱")
+    date_idx = uploaded_headers.index("課程日期")
+    time_idx = uploaded_headers.index("課程時間")
+    open_idx = uploaded_headers.index("開放時間")
+
+    imported_count = 0
+    def cell_to_str(val):
+        if val is None: return ""
+        if isinstance(val, datetime): return val.strftime("%Y-%m-%d %H:%M:%S")
+        if hasattr(val, "strftime"): return val.strftime("%Y-%m-%d")
+        return str(val).strip()
+
+    for r in rows[1:]:
+        if not any(r): continue
+        title = cell_to_str(r[title_idx]) if len(r) > title_idx else ""
+        raw_date = cell_to_str(r[date_idx]) if len(r) > date_idx else ""
+        ctime = cell_to_str(r[time_idx]) if len(r) > time_idx else ""
+        otime = cell_to_str(r[open_idx]) if len(r) > open_idx else ""
+
+        if not title: continue
+        cdate = raw_date.replace("-", "/").split(" ")[0]
+
+        existing = next((c for c in db["courses"] if c["title"].strip() == title), None)
+        if existing:
+            existing["course_date"] = cdate
+            existing["course_time"] = ctime
+            existing["open_time"] = otime
+        else:
+            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
+            db["courses"].append({
+                "id": new_id, 
+                "title": title, 
+                "course_date": cdate, 
+                "course_time": ctime, 
+                "open_time": otime
+            })
+        imported_count += 1
+
+    return {
+        "success": True, 
+        "count": imported_count,
+        "courses": db["courses"]
+    }
+
+# ==========================================
+# 補課與出缺席相關路由保持原樣
 # ==========================================
 @app.get("/admin/courses/{course_id}/attendance", response_class=HTMLResponse)
 async def course_attendance_page(course_id: int, request: Request):
