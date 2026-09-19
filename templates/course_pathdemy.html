@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>導論：自然永續的核心觀念與倫理基礎 ‧ 學員補課狀況 - 後台管理</title>
+  <title>{{ course.title if course else '導論：自然永續的核心觀念與倫理基礎' }} ‧ 學員補課狀況 - 後台管理</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- SheetJS CDN (支援 xlsx, xls 本地解析) -->
@@ -19,7 +19,7 @@
 
   <div class="max-w-7xl mx-auto space-y-6">
 
-    <!-- 頂部導覽與標題列卡片 -->
+    <!-- 頂部導覽與標題列卡片 (動態對應所選課程) -->
     <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div class="space-y-2">
         <!-- 返回按鈕 -->
@@ -30,12 +30,12 @@
           返回後台課程列表
         </a>
         
-        <!-- 課程標題 -->
+        <!-- 課程標題 (動態帶入當前選擇的課程名稱) -->
         <h1 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-          導論：自然永續的核心觀念與倫理基礎 ‧ 學員補課狀況
+          <span id="courseTitleHeader">{{ course.title if course else '導論：自然永續的核心觀念與倫理基礎' }}</span> ‧ 學員補課狀況
         </h1>
         
-        <!-- 課程中繼資訊 (日期與時間) -->
+        <!-- 課程中繼資訊 (動態帶入當前課程日期與時間) -->
         <div class="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-500">
           <span class="flex items-center gap-1.5">
             <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -44,7 +44,7 @@
               <line x1="8" y1="2" x2="8" y2="6" stroke-width="2"></line>
               <line x1="3" y1="10" x2="21" y2="10" stroke-width="2"></line>
             </svg>
-            課程日期: 2026/09/15
+            <span id="courseDateHeader">課程日期: {{ course.course_date if course else '2026/09/15' }}</span>
           </span>
           <span class="text-slate-300">|</span>
           <span class="flex items-center gap-1.5">
@@ -52,7 +52,7 @@
               <circle cx="12" cy="12" r="10" stroke-width="2"></circle>
               <polyline points="12 6 12 12 16 14" stroke-width="2"></polyline>
             </svg>
-            課程時間: 18:00-22:00
+            <span id="courseTimeHeader">課程時間: {{ course.course_time if course else '18:00-22:00' }}</span>
           </span>
         </div>
       </div>
@@ -71,7 +71,7 @@
     <!-- 複合查詢與名冊管理區塊 -->
     <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-100 space-y-5">
       
-      <!-- 查詢標題列與功能按鈕 (包含「📥 匯入 Excel」及「重設所有條件」) -->
+      <!-- 查詢標題列與功能按鈕 (已移除 [↑] 圖示) -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-gray-100">
         <div class="flex items-center gap-2">
           <svg class="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -87,17 +87,14 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
-          <!-- 📥 匯入 Excel 按鈕 -->
-          <label class="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl shadow-2xs transition-all cursor-pointer">
-            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-            </svg>
+          <!-- 📥 匯入 Excel 按鈕 (已徹底移除原先紅圈標註的 [↑] 上傳圖示) -->
+          <label class="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl shadow-2xs transition-all cursor-pointer">
             <span>📥 匯入 Excel</span>
             <input type="file" id="excelUploadInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
           </label>
 
-          <!-- 📥 下載範例Excel 按鈕 -->
-          <a href="/api/admin/pathdemy/sample-excel" download="pathdemy_list_upload.xlsx" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1565C0] text-sm font-semibold rounded-xl shadow-2xs transition-all cursor-pointer">
+          <!-- 旁邊增加：📥 下載範例Excel 按鈕 -->
+          <a id="sampleDownloadBtn" href="/api/admin/pathdemy/sample-excel" download="pathdemy_list_upload.xlsx" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1565C0] text-sm font-semibold rounded-xl shadow-2xs transition-all cursor-pointer">
             <span>📥</span>
             <span>下載範例Excel</span>
           </a>
@@ -212,10 +209,10 @@
     <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-100 space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
-          <span>📱</span> 【前台學員狀態即時同步檢視】（學員端登入即刻反應）
+          <span>📱</span> 【前台學員狀態即時同步檢視】（僅反應當前選擇的課程）
         </h3>
         <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
-          即時連動中
+          單一課程獨立連動中
         </span>
       </div>
 
@@ -230,7 +227,7 @@
               </span>
             </div>
           </div>
-          <p class="text-slate-600 font-medium">導論：自然永續的核心觀念與倫理基礎</p>
+          <p class="text-slate-600 font-medium" id="previewCourseTitle">導論：自然永續的核心觀念與倫理基礎</p>
           <div class="pt-2 flex items-center justify-between border-t border-slate-200/60">
             <span class="text-xs text-slate-400" id="portalCheckinHint">需完成課程簽到或補課</span>
             <button id="portalCheckinBtn" disabled class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-200 text-slate-400 cursor-not-allowed">
@@ -278,13 +275,87 @@
     </div>
   </div>
 
+  <!-- 伺服器傳遞之當前課程資料 (確保補課名單僅嚴格對應選擇的該堂課程) -->
+  <script id="currentCourseData" type="application/json">
+    {% if course %}{{ course | tojson }}{% else %}null{% endif %}
+  </script>
+
   <!-- 伺服器傳遞之學員名單 JSON (若由 FastAPI Jinja2 渲染時注入) -->
   <script id="serverStudentsData" type="application/json">
     {% if all_students %}{{ all_students | tojson }}{% else %}[]{% endif %}
   </script>
 
   <script>
+    // ==========================================
+    // 當前課程狀態管理 (確保只針對「選擇的該堂課」匯入補課清單，絕不套用至其他課程)
+    // ==========================================
+    let currentCourse = {
+      id: 1,
+      title: "導論：自然永續的核心觀念與倫理基礎",
+      course_date: "2026/09/15",
+      course_time: "18:00-22:00"
+    };
+
+    function initCurrentCourse() {
+      // 1. 優先從後端 Jinja 模板注入的課程資料讀取
+      try {
+        const el = document.getElementById('currentCourseData');
+        if (el && el.textContent.trim() && el.textContent.trim() !== 'null') {
+          const c = JSON.parse(el.textContent);
+          if (c && c.id) {
+            currentCourse = c;
+            updateCourseHeaderUI();
+            return;
+          }
+        }
+      } catch(e) {}
+
+      // 2. 嘗試從 URL 路徑解析 (/admin/courses/{id}/pathdemy)
+      const matchPath = window.location.pathname.match(/\/courses\/(\d+)/i);
+      let targetId = null;
+      if (matchPath) {
+        targetId = parseInt(matchPath, 10);
+      } else {
+        // 3. 嘗試從 URL 參數解析 (?course_id={id})
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('course_id')) {
+          targetId = parseInt(params.get('course_id'), 10);
+        }
+      }
+
+      if (targetId) {
+        currentCourse.id = targetId;
+        try {
+          const allCourses = JSON.parse(localStorage.getItem('blia_courses') || '[]');
+          const matched = allCourses.find(c => Number(c.id) === targetId);
+          if (matched) {
+            currentCourse = matched;
+          } else {
+            currentCourse.title = `課程 #${targetId}`;
+          }
+        } catch(e) {}
+      }
+
+      updateCourseHeaderUI();
+    }
+
+    function updateCourseHeaderUI() {
+      const titleEl = document.getElementById('courseTitleHeader');
+      if (titleEl && currentCourse.title) titleEl.innerText = currentCourse.title;
+
+      const dateEl = document.getElementById('courseDateHeader');
+      if (dateEl && currentCourse.course_date) dateEl.innerText = `課程日期: ${currentCourse.course_date}`;
+
+      const timeEl = document.getElementById('courseTimeHeader');
+      if (timeEl && currentCourse.course_time) timeEl.innerText = `課程時間: ${currentCourse.course_time}`;
+
+      const previewTitleEl = document.getElementById('previewCourseTitle');
+      if (previewTitleEl && currentCourse.title) previewTitleEl.innerText = currentCourse.title;
+    }
+
+    // ==========================================
     // 動態載入最新學員名單 (與後台學員名單維護完全同步)
+    // ==========================================
     let systemStudents = [];
 
     function loadSystemStudents() {
@@ -328,22 +399,24 @@
       ];
     }
 
-    // 本頁面補課清單狀態 (以 Course ID 1 為主)
+    // 當前選擇課程的補課清單狀態 (以 currentCourse.id 嚴格隔離)
     let makeupRecords = [];
     let recordToDeleteId = null;
 
     // 初始化載入
     document.addEventListener("DOMContentLoaded", () => {
+      initCurrentCourse();
       loadSystemStudents();
       loadStorageData();
       renderAll();
     });
 
-    // 從 LocalStorage 讀取已存紀錄，並自動比對學員名單補齊欄位
+    // 從 LocalStorage 讀取「當前選擇課程」的補課紀錄，並自動比對學員名單補齊欄位
     function loadStorageData() {
       loadSystemStudents();
+      const storageKey = `blia_makeup_records_course_${currentCourse.id}`;
       try {
-        const saved = localStorage.getItem("blia_makeup_records_course_1");
+        const saved = localStorage.getItem(storageKey);
         if (saved) {
           makeupRecords = JSON.parse(saved);
         } else {
@@ -374,11 +447,12 @@
       });
     }
 
-    // 儲存補課資料至 LocalStorage，並同步更新前台狀態與課程清單
+    // 儲存補課資料至 LocalStorage，並「只針對當前選擇的課程」更新出缺席狀態，絕不影響其他課程
     function saveStorageData() {
-      localStorage.setItem("blia_makeup_records_course_1", JSON.stringify(makeupRecords));
+      const storageKey = `blia_makeup_records_course_${currentCourse.id}`;
+      localStorage.setItem(storageKey, JSON.stringify(makeupRecords));
 
-      // 取得或初始化總體出缺席/補課狀態
+      // 取得或初始化總體出缺席狀態 (全系統標準鍵名格式: ${student_id}_${course_id})
       let attendances = {};
       try {
         attendances = JSON.parse(localStorage.getItem("blia_attendances") || "{}");
@@ -386,23 +460,24 @@
         attendances = {};
       }
 
-      // 先清除此課程的所有補課標記
+      // 核心隔離：僅清除「當前這堂課 (course_id: currentCourse.id)」的補課標記，其他課程完全保留且不受影響
       for (const key in attendances) {
-        if (key.startsWith("1_") && attendances[key].status === "MAKEUP") {
+        if (key.endsWith(`_${currentCourse.id}`) && (attendances[key].status === "MAKEUP" || attendances[key].status === "MAKEUP_DONE")) {
           delete attendances[key];
         }
       }
 
-      // 依目前補課名單標記學員為已補課
+      // 依目前這堂課的補課名單，嚴格為「當前這堂課程」標記學員為已補課
       makeupRecords.forEach(rec => {
         if (rec.student_id) {
-          const key = `1_${rec.student_id}`;
+          // 鍵值格式嚴格為: ${student_id}_${currentCourse.id}
+          const key = `${rec.student_id}_${currentCourse.id}`;
           attendances[key] = {
-            course_id: 1,
+            course_id: currentCourse.id,
             student_id: rec.student_id,
             student_name: rec.student_name,
             email: rec.email,
-            status: "MAKEUP",
+            status: "MAKEUP_DONE",
             status_text: "已補課",
             makeup_time: rec.makeup_time,
             updated_at: new Date().toISOString()
@@ -412,39 +487,16 @@
 
       localStorage.setItem("blia_attendances", JSON.stringify(attendances));
 
-      // 同步更新前台課程清單之狀態與快取
-      let courses = [
-        {
-          id: 1,
-          title: "導論：自然永續的核心觀念與倫理基礎",
-          course_date: "2026/09/15",
-          course_time: "18:00-22:00",
-          open_time: "2026-09-15 18:00:00"
-        },
-        {
-          id: 2,
-          title: "健康一體（One Health）與系統思維",
-          course_date: "2026/09/22",
-          course_time: "18:30-21:30",
-          open_time: "2026-09-22 18:00:00"
-        }
-      ];
-      try {
-        const savedCourses = JSON.parse(localStorage.getItem("blia_courses") || "[]");
-        if (savedCourses && savedCourses.length > 0) courses = savedCourses;
-      } catch(e) {}
-      localStorage.setItem("blia_courses", JSON.stringify(courses));
-
       try {
         window.dispatchEvent(new Event("storage"));
       } catch(e) {}
 
-      // 觸發自定義事件與更新前台預覽
+      // 更新前台預覽
       renderFrontEndPreview();
     }
 
     // ==========================================
-    // Excel 檔案解析與欄位格式校驗 (透過 Email(補課平台) 比對學員名單補齊資訊)
+    // Excel 檔案解析與欄位格式校驗 (只針對選擇的該堂課程匯入補課清單)
     // ==========================================
     async function handleFileUpload(event) {
       const file = event.target.files[0];
@@ -458,7 +510,7 @@
         return;
       }
 
-      showToast('檔案讀取中，正在比對欄位格式與學員名單...', 'info');
+      showToast(`檔案讀取中，正在為課程【${currentCourse.title}】比對學員名單...`, 'info');
 
       try {
         const data = await file.arrayBuffer();
@@ -515,7 +567,7 @@
 
           if (!rowPlatformEmail) continue;
 
-          // 核心功能：透過 [Email(補課平台)] 去比對 [學員名單]
+          // 核心功能：透過 [Email(補課平台)] 比對學員名單
           const targetEmail = rowPlatformEmail.toLowerCase();
           const matchedStudent = systemStudents.find(s => {
             const sPathdemy = String(s.email_pathdemy || s.platform_email || '').trim().toLowerCase();
@@ -529,17 +581,12 @@
 
           // 比對後自動補上 [學員姓名]、[Email]、[聯絡電話]
           const record = {
-            id: exists ? exists.id : `makeup_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
+            id: exists ? exists.id : `makeup_${currentCourse.id}_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
             student_id: matchedStudent ? matchedStudent.id : null,
-            // 補上學員姓名
             student_name: matchedStudent ? matchedStudent.name : '外部未登記學員',
-            // 補上學員主要 Email
             email: matchedStudent ? matchedStudent.email : '-',
-            // 補課平台 Email
             platform_email: rowPlatformEmail,
-            // 補上學員聯絡電話
             phone: matchedStudent ? matchedStudent.phone : '-',
-            // 補課時間
             makeup_time: rowDate
           };
 
@@ -553,23 +600,21 @@
           }
         }
 
-        // 若後端 API 存在，同步發送到後端
+        // 僅發送到後端「當前選擇課程」的補課匯入 API
         try {
-          const courseIdMatch = window.location.pathname.match(/\/courses\/(\d+)\//);
-          const courseId = courseIdMatch ? courseIdMatch[1] : 1;
           const formData = new FormData();
           formData.append('file', file);
-          await fetch(`/api/admin/courses/${courseId}/pathdemy/import`, { method: 'POST', body: formData });
+          await fetch(`/api/admin/courses/${currentCourse.id}/pathdemy/import`, { method: 'POST', body: formData });
         } catch(apiErr) {
           console.log('後端同步備援處理:', apiErr);
         }
 
-        // 儲存至本地快取並同步更新前台課程清單狀態
+        // 儲存至本地快取並同步更新當前課程狀態
         saveStorageData();
         renderAll();
 
-        alert(`🎉 成功匯入完成！共處理 ${sheetRows.length - 1} 筆資料，成功比對學員名單 ${matchedCount} 筆。\n已透過「Email(補課平台)」比對學員名單，成功補上【學員姓名】、【Email】與【聯絡電話】！\n前台課程清單亦已同步更新。`);
-        showToast('🎉 成功匯入完成！前台課程清單已即時同步已補課狀態。', 'success');
+        alert(`🎉 成功匯入完成！共處理 ${sheetRows.length - 1} 筆資料，成功比對學員名單 ${matchedCount} 筆。\n本次匯入僅針對課程【${currentCourse.title}】更新補課紀錄，其他課程完全不受影響！\n已透過「Email(補課平台)」自動補齊【學員姓名】、【Email】與【聯絡電話】。`);
+        showToast(`🎉 課程【${currentCourse.title}】補課名單匯入成功！`, 'success');
       } catch (err) {
         console.error(err);
         alert('❌ 檔案格式讀取失敗，請確認為標準 Excel (.xlsx 或 .xls) 格式！');
@@ -640,7 +685,7 @@
         if (makeupRecords.length > 0) {
           emptyStateText.innerText = "查無符合條件的補課學員資料。";
         } else {
-          emptyStateText.innerText = "目前這堂課程尚無學員登記補課。";
+          emptyStateText.innerText = `目前課程【${currentCourse.title}】尚無學員登記補課。`;
         }
         tbody.innerHTML = "";
       } else {
@@ -689,7 +734,7 @@
     // 刪除補課紀錄功能
     function promptDeleteRecord(id, studentName) {
       recordToDeleteId = id;
-      document.getElementById("deleteModalDesc").innerHTML = `確定要刪除學員「<strong class="text-slate-900">${studentName}</strong>」的補課紀錄嗎？<br>刪除後該學員在【前台】的【🎏 課程簽到】與【📋 已完成紀錄】將不再顯示「已補課」。`;
+      document.getElementById("deleteModalDesc").innerHTML = `確定要刪除學員「<strong class="text-slate-900">${studentName}</strong>」在課程【${currentCourse.title}】的補課紀錄嗎？<br>刪除後該學員在【前台】的此堂課將恢復為未補課狀態。`;
       document.getElementById("deleteModal").classList.remove("hidden");
     }
 
@@ -708,11 +753,12 @@
       renderAll();
       closeDeleteModal();
 
-      showToast(`已成功刪除「${name}」的補課紀錄！前台狀態已同步更新。`, "success");
+      showToast(`已成功刪除「${name}」在課程【${currentCourse.title}】的補課紀錄！`, "success");
     });
 
     // 前台同步狀態驗證模擬
     function renderFrontEndPreview() {
+      // 檢查目前學員 (黃雅筠 student_id: 1) 在「當前這堂課程」是否有補課紀錄
       const hasMakeup = makeupRecords.some(r => r.student_id === 1 || r.platform_email.toLowerCase() === "vinnyhuang168@gmail.com");
       const makeupInfo = makeupRecords.find(r => r.student_id === 1 || r.platform_email.toLowerCase() === "vinnyhuang168@gmail.com");
 
@@ -737,7 +783,7 @@
           <div class="p-3 bg-white rounded-lg border border-purple-200 flex items-center justify-between shadow-2xs">
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-bold text-sm text-slate-800">導論：自然永續的核心觀念與倫理基礎</span>
+                <span class="font-bold text-sm text-slate-800">${escapeHtml(currentCourse.title)}</span>
                 <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
                   已補課
                 </span>

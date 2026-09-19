@@ -1,769 +1,856 @@
-import os
-import io
-import csv
-from pathlib import Path
-from datetime import datetime
-from typing import Optional
-from fastapi import FastAPI, Request, Form, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
-from fastapi.templating import Jinja2Templates
-import openpyxl
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ course.title if course else '導論：自然永續的核心觀念與倫理基礎' }} ‧ 學員補課狀況 - 後台管理</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS CDN (支援 xlsx, xls 本地解析) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-[#F8FAFC] text-slate-800 min-h-screen p-4 sm:p-6 md:p-8">
 
-# JWT 認證支援（若環境缺少 pyjwt 則自動降級相容）
-try:
-    import jwt
-except ImportError:
-    class MockJWT:
-        @staticmethod
-        def encode(payload, key, algorithm="HS256"):
-            import json, base64
-            return base64.b64encode(json.dumps(payload).encode()).decode()
-        @staticmethod
-        def decode(token, key, algorithms=["HS256"]):
-            import json, base64
-            return json.loads(base64.b64decode(token.encode()).decode())
-    jwt = MockJWT()
+  <div class="max-w-7xl mx-auto space-y-6">
 
-app = FastAPI(title="BLIA佛光永續學院簽到系統 - iPure Green")
+    <!-- 頂部導覽與標題列卡片 (動態對應所選課程) -->
+    <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="space-y-2">
+        <!-- 返回按鈕 -->
+        <a href="javascript:void(0)" onclick="history.back()" class="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-800 transition">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+          返回後台課程列表
+        </a>
+        
+        <!-- 課程標題 (動態帶入當前選擇的課程名稱) -->
+        <h1 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+          <span id="courseTitleHeader">{{ course.title if course else '導論：自然永續的核心觀念與倫理基礎' }}</span> ‧ 學員補課狀況
+        </h1>
+        
+        <!-- 課程中繼資訊 (動態帶入當前課程日期與時間) -->
+        <div class="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-500">
+          <span class="flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-width="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6" stroke-width="2"></line>
+              <line x1="8" y1="2" x2="8" y2="6" stroke-width="2"></line>
+              <line x1="3" y1="10" x2="21" y2="10" stroke-width="2"></line>
+            </svg>
+            <span id="courseDateHeader">課程日期: {{ course.course_date if course else '2026/09/15' }}</span>
+          </span>
+          <span class="text-slate-300">|</span>
+          <span class="flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" stroke-width="2"></circle>
+              <polyline points="12 6 12 12 16 14" stroke-width="2"></polyline>
+            </svg>
+            <span id="courseTimeHeader">課程時間: {{ course.course_time if course else '18:00-22:00' }}</span>
+          </span>
+        </div>
+      </div>
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-TEMPLATES_DIR = BASE_DIR / "templates"
-UPLOAD_DIR = BASE_DIR / "uploadfile"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+      <!-- 右側統計資訊卡片 -->
+      <div class="flex items-center gap-4 self-start md:self-auto">
+        <div class="bg-[#F0F7FF] border border-[#E0EFFE] rounded-2xl px-6 py-3 min-w-[140px] text-center shadow-xs">
+          <div class="text-xs text-[#0284C7] font-semibold tracking-wide mb-0.5">補課總人數</div>
+          <div class="text-2xl sm:text-3xl font-extrabold text-[#0369A1]">
+            <span id="totalMakeupCount">0</span> <span class="text-sm font-semibold">人</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-SECRET_KEY = os.getenv("SECRET_KEY", "ipuregreen-blia-secret-key-2026")
+    <!-- 複合查詢與名冊管理區塊 -->
+    <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-100 space-y-5">
+      
+      <!-- 查詢標題列與功能按鈕 (已移除 [↑] 圖示) -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-gray-100">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8" stroke-width="2"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2"></line>
+          </svg>
+          <h2 class="text-base sm:text-lg font-bold text-slate-800">
+            學員補課名單複合查詢 
+            <span class="text-xs sm:text-sm font-normal text-slate-400 ml-1">
+              (符合條件: <span id="matchedCount" class="text-sky-600 font-bold">0</span> / <span id="subTotalCount" class="text-slate-600 font-medium">0</span> 人)
+            </span>
+          </h2>
+        </div>
 
-# 資料庫模型
-db = {
-    "admins": [
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <!-- 📥 匯入 Excel 按鈕 (已徹底移除原先紅圈標註的 [↑] 上傳圖示) -->
+          <label class="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl shadow-2xs transition-all cursor-pointer">
+            <span>📥 匯入 Excel</span>
+            <input type="file" id="excelUploadInput" accept=".xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
+          </label>
+
+          <!-- 旁邊增加：📥 下載範例Excel 按鈕 -->
+          <a id="sampleDownloadBtn" href="/api/admin/pathdemy/sample-excel" download="pathdemy_list_upload.xlsx" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#1565C0] text-sm font-semibold rounded-xl shadow-2xs transition-all cursor-pointer">
+            <span>📥</span>
+            <span>下載範例Excel</span>
+          </a>
+
+          <!-- 重設所有條件按鈕 -->
+          <button type="button" onclick="resetFilters()" class="px-3 py-2 text-sm text-slate-400 hover:text-slate-600 font-medium transition">
+            重設所有條件
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 欄複合查詢條件輸入框 -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 欄位 1: 學員姓名 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">學員姓名</label>
+          <input 
+            type="text" 
+            id="searchName" 
+            placeholder="搜尋姓名..." 
+            oninput="filterRecords()"
+            class="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition"
+          >
+        </div>
+
+        <!-- 欄位 2: Email / 補課平台 Email -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">Email / 補課平台 Email</label>
+          <input 
+            type="text" 
+            id="searchEmail" 
+            placeholder="搜尋 Email..." 
+            oninput="filterRecords()"
+            class="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition"
+          >
+        </div>
+
+        <!-- 欄位 3: 聯絡電話 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">聯絡電話</label>
+          <input 
+            type="text" 
+            id="searchPhone" 
+            placeholder="搜尋電話號碼..." 
+            oninput="filterRecords()"
+            class="w-full px-3.5 py-2.5 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition"
+          >
+        </div>
+
+        <!-- 欄位 4: 補課日期起訖 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">補課日期</label>
+          <div class="flex items-center gap-1.5">
+            <input 
+              type="date" 
+              id="searchStartDate" 
+              onchange="filterRecords()"
+              class="w-full px-2.5 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition"
+            >
+            <span class="text-slate-400 text-xs shrink-0">至</span>
+            <input 
+              type="date" 
+              id="searchEndDate" 
+              onchange="filterRecords()"
+              class="w-full px-2.5 py-2 bg-slate-50/70 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition"
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- 提示訊息 Toast -->
+      <div id="toastMessage" class="hidden p-3.5 rounded-xl text-sm flex items-center justify-between transition-all"></div>
+
+      <!-- 學員補課資料清單 -->
+      <div id="contentSection">
+        
+        <!-- 空狀態畫面 -->
+        <div id="emptyState" class="py-16 text-center text-slate-400 flex flex-col items-center justify-center gap-2.5">
+          <div class="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 text-2xl mb-1">
+            📖
+          </div>
+          <p class="text-sm font-medium text-slate-500" id="emptyStateText">目前這堂課程尚無學員登記補課。</p>
+          <p class="text-xs text-slate-400">請點擊右上角「📥 匯入 Excel」上傳 Pathdemy 補課名單檔案</p>
+        </div>
+
+        <!-- 補課清單表格 (透過 Email(補課平台) 比對學員名單補齊：學員姓名、Email、聯絡電話) -->
+        <div id="tableWrapper" class="hidden overflow-hidden rounded-xl border border-slate-200">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <tr>
+                  <th class="py-3.5 px-4">學員姓名</th>
+                  <th class="py-3.5 px-4">Email</th>
+                  <th class="py-3.5 px-4 text-blue-700">Email(補課平台)</th>
+                  <th class="py-3.5 px-4">聯絡電話</th>
+                  <th class="py-3.5 px-4">補課時間</th>
+                  <th class="py-3.5 px-4 text-center">刪除補課</th>
+                </tr>
+              </thead>
+              <tbody id="makeupTableBody" class="divide-y divide-slate-100 bg-white">
+                <!-- 動態注入補齊資料後的補課學員列 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- 前台畫面連動即時驗證卡片 -->
+    <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-100 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+          <span>📱</span> 【前台學員狀態即時同步檢視】（僅反應當前選擇的課程）
+        </h3>
+        <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+          單一課程獨立連動中
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <!-- 前台區域 1: 🎏 課程簽到狀態模擬 -->
+        <div class="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-800 text-sm">🎏 課程簽到卡片</span>
+            <div id="portalCheckinBadge">
+              <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                未簽到
+              </span>
+            </div>
+          </div>
+          <p class="text-slate-600 font-medium" id="previewCourseTitle">導論：自然永續的核心觀念與倫理基礎</p>
+          <div class="pt-2 flex items-center justify-between border-t border-slate-200/60">
+            <span class="text-xs text-slate-400" id="portalCheckinHint">需完成課程簽到或補課</span>
+            <button id="portalCheckinBtn" disabled class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-200 text-slate-400 cursor-not-allowed">
+              未開放簽到
+            </button>
+          </div>
+        </div>
+
+        <!-- 前台區域 2: 📋 已完成紀錄狀態模擬 -->
+        <div class="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-800 text-sm">📋 已完成紀錄列表</span>
+            <span class="text-xs text-slate-400">歷史完成狀態</span>
+          </div>
+          <div id="portalCompletedList" class="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+            <!-- 動態顯示 -->
+            <div class="text-center py-4 text-xs text-slate-400" id="portalCompletedEmpty">
+              尚無已完成簽到或補課的課程紀錄。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 刪除確認 Modal -->
+  <div id="deleteModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center gap-3 text-red-600">
+        <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl">⚠️</div>
+        <h3 class="text-lg font-bold text-slate-900">確認刪除補課紀錄？</h3>
+      </div>
+      <p class="text-sm text-slate-600" id="deleteModalDesc">
+        確定要刪除該筆補課資料嗎？刪除後對應前台將恢復為未補課狀態。
+      </p>
+      <div class="flex justify-end gap-2.5 pt-2">
+        <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition">
+          取消
+        </button>
+        <button type="button" id="confirmDeleteBtn" class="px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-700 text-white shadow-sm transition">
+          確定刪除
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 伺服器傳遞之當前課程資料 (確保補課名單僅嚴格對應選擇的該堂課程) -->
+  <script id="currentCourseData" type="application/json">
+    {% if course %}{{ course | tojson }}{% else %}null{% endif %}
+  </script>
+
+  <!-- 伺服器傳遞之學員名單 JSON (若由 FastAPI Jinja2 渲染時注入) -->
+  <script id="serverStudentsData" type="application/json">
+    {% if all_students %}{{ all_students | tojson }}{% else %}[]{% endif %}
+  </script>
+
+  <script>
+    // ==========================================
+    // 當前課程狀態管理 (確保只針對「選擇的該堂課」匯入補課清單，絕不套用至其他課程)
+    // ==========================================
+    let currentCourse = {
+      id: 1,
+      title: "導論：自然永續的核心觀念與倫理基礎",
+      course_date: "2026/09/15",
+      course_time: "18:00-22:00"
+    };
+
+    function initCurrentCourse() {
+      // 1. 優先從後端 Jinja 模板注入的課程資料讀取
+      try {
+        const el = document.getElementById('currentCourseData');
+        if (el && el.textContent.trim() && el.textContent.trim() !== 'null') {
+          const c = JSON.parse(el.textContent);
+          if (c && c.id) {
+            currentCourse = c;
+            updateCourseHeaderUI();
+            return;
+          }
+        }
+      } catch(e) {}
+
+      // 2. 嘗試從 URL 路徑解析 (/admin/courses/{id}/pathdemy)
+      const matchPath = window.location.pathname.match(/\/courses\/(\d+)/i);
+      let targetId = null;
+      if (matchPath) {
+        targetId = parseInt(matchPath, 10);
+      } else {
+        // 3. 嘗試從 URL 參數解析 (?course_id={id})
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('course_id')) {
+          targetId = parseInt(params.get('course_id'), 10);
+        }
+      }
+
+      if (targetId) {
+        currentCourse.id = targetId;
+        try {
+          const allCourses = JSON.parse(localStorage.getItem('blia_courses') || '[]');
+          const matched = allCourses.find(c => Number(c.id) === targetId);
+          if (matched) {
+            currentCourse = matched;
+          } else {
+            currentCourse.title = `課程 #${targetId}`;
+          }
+        } catch(e) {}
+      }
+
+      updateCourseHeaderUI();
+    }
+
+    function updateCourseHeaderUI() {
+      const titleEl = document.getElementById('courseTitleHeader');
+      if (titleEl && currentCourse.title) titleEl.innerText = currentCourse.title;
+
+      const dateEl = document.getElementById('courseDateHeader');
+      if (dateEl && currentCourse.course_date) dateEl.innerText = `課程日期: ${currentCourse.course_date}`;
+
+      const timeEl = document.getElementById('courseTimeHeader');
+      if (timeEl && currentCourse.course_time) timeEl.innerText = `課程時間: ${currentCourse.course_time}`;
+
+      const previewTitleEl = document.getElementById('previewCourseTitle');
+      if (previewTitleEl && currentCourse.title) previewTitleEl.innerText = currentCourse.title;
+    }
+
+    // ==========================================
+    // 動態載入最新學員名單 (與後台學員名單維護完全同步)
+    // ==========================================
+    let systemStudents = [];
+
+    function loadSystemStudents() {
+      // 1. 優先從 localStorage 讀取最新學員名冊 (學員名單維護同步儲存的 blia_students)
+      try {
+        const stored = JSON.parse(localStorage.getItem('blia_students') || '[]');
+        if (Array.isArray(stored) && stored.length > 0) {
+          systemStudents = stored;
+          return;
+        }
+      } catch (e) {}
+
+      // 2. 嘗試從後端 Jinja 模板注入的 JSON 讀取
+      try {
+        const scriptData = document.getElementById('serverStudentsData');
+        if (scriptData && scriptData.textContent.trim()) {
+          const parsed = JSON.parse(scriptData.textContent);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            systemStudents = parsed;
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // 3. 預設備援學員名冊
+      systemStudents = [
         {
-            "id": 1,
-            "email": "service@ipuregreen.org",
-            "password": "2026ipuregreen",
-            "status": "active",
-            "role": "superadmin"
+          id: 1,
+          name: "黃雅筠",
+          email: "vinnyhuang.ipuregreen@gmail.com",
+          email_pathdemy: "vinnyhuang168@gmail.com",
+          phone: "0912345678"
         },
         {
-            "id": 2,
-            "email": "vinnyhuang.ipuregreen@gmail.com",
-            "password": "123456",
-            "status": "active",
-            "role": "admin"
+          id: 2,
+          name: "林小明",
+          email: "ming@example.com",
+          email_pathdemy: "ming@example.com",
+          phone: "0987654321"
         }
-    ],
-    "students": [
-        {
-            "id": 1, 
-            "name": "黃雅筠", 
-            "email": "vinnyhuang.ipuregreen@gmail.com", 
-            "email_pathdemy": "vinnyhuang168@gmail.com",
-            "phone": "0912345678"
-        }
-    ],
-    "courses": [
-        {
-            "id": 1,
-            "title": "導論：自然永續的核心觀念與倫理基礎",
-            "course_date": "2026/09/15",
-            "course_time": "18:00-22:00",
-            "open_time": "2026-09-15 18:00:00"
-        },
-        {
-            "id": 2,
-            "title": "健康一體（One Health）與系統思維",
-            "course_date": "2026/09/22",
-            "course_time": "18:30-21:30",
-            "open_time": "2026-09-22 18:00:00"
-        }
-    ],
-    "attendances": {
-        "1_1": {"status": "SIGNED_IN", "signed_at": "2026-09-15 18:05:12"}
+      ];
     }
-}
 
-# --- 認證輔助函式 ---
-def get_current_student(request: Request):
-    token = request.cookies.get("token")
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return next((s for s in db["students"] if s["id"] == payload["id"]), None)
-    except:
-        return None
+    // 當前選擇課程的補課清單狀態 (以 currentCourse.id 嚴格隔離)
+    let makeupRecords = [];
+    let recordToDeleteId = null;
 
-def get_current_admin(request: Request):
-    token = request.cookies.get("admin_token")
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        admin = next((a for a in db["admins"] if a["id"] == payload.get("id")), None)
-        if admin and admin["status"] == "active":
-            return admin
-    except:
-        return None
-    return None
+    // 初始化載入
+    document.addEventListener("DOMContentLoaded", () => {
+      initCurrentCourse();
+      loadSystemStudents();
+      loadStorageData();
+      renderAll();
+    });
 
-# ==========================================
-# 前台學員路由
-# ==========================================
-@app.get("/", response_class=HTMLResponse)
-async def login_page(request: Request):
-    token = request.cookies.get("token")
-    if token:
-        student = get_current_student(request)
-        if student:
-            return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse(request=request, name="login.html", context={})
-
-@app.get("/logout")
-async def logout():
-    resp = RedirectResponse(url="/", status_code=302)
-    resp.delete_cookie(key="token", path="/")
-    return resp
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request):
-    student = get_current_student(request)
-    if not student:
-        return RedirectResponse(url="/", status_code=302)
-    
-    signed_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "SIGNED_IN")
-    leave_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "ON_LEAVE")
-    makeup_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "MAKEUP_DONE")
-    absent_count = sum(1 for k, v in db["attendances"].items() if k.startswith(f"{student['id']}_") and v.get("status") == "ABSENT")
-
-    courses_view = []
-    for c in db["courses"]:
-        record = db["attendances"].get(f"{student['id']}_{c['id']}")
-        status = record["status"] if record else "PENDING"
-        makeup_date = record.get("makeup_date", "") if record else ""
-        courses_view.append({**c, "status": status, "makeup_date": makeup_date})
-
-    return templates.TemplateResponse(
-        request=request,
-        name="dashboard.html",
-        context={
-            "student": student,
-            "stats": {
-                "signed": signed_count,
-                "leave": leave_count,
-                "makeup": makeup_count,
-                "absent": absent_count
-            },
-            "courses": courses_view
+    // 從 LocalStorage 讀取「當前選擇課程」的補課紀錄，並自動比對學員名單補齊欄位
+    function loadStorageData() {
+      loadSystemStudents();
+      const storageKey = `blia_makeup_records_course_${currentCourse.id}`;
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          makeupRecords = JSON.parse(saved);
+        } else {
+          makeupRecords = [];
         }
-    )
+      } catch (e) {
+        makeupRecords = [];
+      }
 
-@app.get("/api/auth/logout")
-async def student_logout():
-    resp = RedirectResponse(url="/", status_code=302)
-    resp.delete_cookie(key="token", path="/")
-    return resp
-
-@app.post("/api/auth/login")
-async def api_login(email: str = Form(...), phone: str = Form(...)):
-    clean_email = email.strip().lower()
-    clean_phone = phone.strip()
-    student = next((s for s in db["students"] if (s["email"].strip().lower() == clean_email or s.get("email_pathdemy", "").strip().lower() == clean_email) and s["phone"].strip() == clean_phone), None)
-    if not student:
-        return JSONResponse(status_code=401, content={"error": "查無此報名資料，請確認 Email 與電話！"})
-    
-    token = jwt.encode({"id": student["id"], "email": student["email"]}, SECRET_KEY, algorithm="HS256")
-    resp = JSONResponse(content={"success": True})
-    resp.set_cookie("token", token, httponly=True, max_age=86400*7, path="/")
-    return resp
-
-@app.post("/api/attendance/checkin")
-async def api_checkin(request: Request):
-    student = get_current_student(request)
-    if not student:
-        raise HTTPException(status_code=401, detail="請先登入")
-    data = await request.json()
-    course_id = data.get("course_id")
-    key = f"{student['id']}_{course_id}"
-    db["attendances"][key] = {
-        "status": "SIGNED_IN",
-        "signed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    return {"success": True}
-
-@app.post("/api/attendance/leave")
-async def api_leave(request: Request):
-    student = get_current_student(request)
-    if not student:
-        raise HTTPException(status_code=401, detail="請先登入")
-    data = await request.json()
-    course_id = data.get("course_id")
-    reason = data.get("reason", "")
-    key = f"{student['id']}_{course_id}"
-    db["attendances"][key] = {
-        "status": "ON_LEAVE",
-        "reason": reason,
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    return {"success": True}
-
-@app.post("/api/attendance/makeup")
-async def api_makeup(request: Request):
-    student = get_current_student(request)
-    if not student:
-        raise HTTPException(status_code=401, detail="請先登入")
-    data = await request.json()
-    course_id = data.get("course_id")
-    key = f"{student['id']}_{course_id}"
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    platform_email = student.get("email_pathdemy") or student["email"]
-    
-    db["attendances"][key] = {
-        "status": "MAKEUP_DONE",
-        "makeup_date": now_str,
-        "platform_email": platform_email,
-        "note": "自行登錄",
-        "updated_at": now_str
-    }
-    return {"success": True}
-
-# ==========================================
-# 後台管理路由
-# ==========================================
-@app.get("/admin/login", response_class=HTMLResponse)
-async def admin_login_page(request: Request):
-    if get_current_admin(request):
-        return RedirectResponse(url="/admin", status_code=302)
-    return templates.TemplateResponse(request=request, name="admin_login.html", context={})
-
-@app.post("/api/admin/auth/login")
-async def admin_login(email: str = Form(...), password: str = Form(...)):
-    admin = next((a for a in db["admins"] if a["email"].strip().lower() == email.strip().lower() and a["password"] == password.strip()), None)
-    if not admin:
-        return JSONResponse(status_code=401, content={"error": "管理者帳號或密碼錯誤！"})
-    if admin["status"] != "active":
-        return JSONResponse(status_code=403, content={"error": "此管理者帳號已被停用，請聯繫最高管理者！"})
-    
-    token = jwt.encode({"id": admin["id"], "role": admin["role"], "email": admin["email"]}, SECRET_KEY, algorithm="HS256")
-    resp = JSONResponse(content={"success": True})
-    resp.set_cookie("admin_token", token, httponly=True, max_age=86400*7, path="/")
-    return resp
-
-@app.get("/api/admin/auth/logout")
-async def admin_logout():
-    resp = RedirectResponse(url="/admin/login", status_code=302)
-    resp.delete_cookie(key="admin_token", path="/")
-    return resp
-
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
-    current_admin = get_current_admin(request)
-    if not current_admin:
-        return RedirectResponse(url="/admin/login", status_code=302)
-    return templates.TemplateResponse(
-        request=request,
-        name="admin.html",
-        context={
-            "admins": db["admins"],
-            "students": db["students"],
-            "courses": db["courses"],
-            "current_admin": current_admin
+      // 自動比對補齊既有資料中未補上的學員姓名、Email、聯絡電話
+      makeupRecords.forEach(rec => {
+        if (!rec.student_id || rec.student_name === '外部未登記學員' || rec.email === '-' || rec.phone === '-') {
+          const targetEmail = String(rec.platform_email || '').trim().toLowerCase();
+          const matched = systemStudents.find(s => {
+            const sPathdemy = String(s.email_pathdemy || s.platform_email || '').trim().toLowerCase();
+            const sEmail = String(s.email || '').trim().toLowerCase();
+            return (sPathdemy && sPathdemy === targetEmail) || 
+                   (sEmail && sEmail === targetEmail) || 
+                   (targetEmail.startsWith('vinnyhuang') && s.name === '黃雅筠');
+          });
+          if (matched) {
+            rec.student_id = matched.id;
+            rec.student_name = matched.name;
+            rec.email = matched.email;
+            rec.phone = matched.phone;
+          }
         }
-    )
+      });
+    }
 
-# ==========================================
-# 1. 學員名單管理：範本下載 & Excel 匯入校驗
-# ==========================================
-@app.get("/api/admin/students/sample-excel")
-async def download_student_sample_excel(request: Request):
-    if not get_current_admin(request):
-        raise HTTPException(status_code=401, detail="未授權")
-    
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    sample_file = UPLOAD_DIR / "student_list_upload.xlsx"
-    
-    if not sample_file.exists():
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "學員名單"
-        ws.append(["學員姓名", "Email", "Email(補課平台)", "聯絡電話"])
-        ws.append(["黃雅筠", "vinnyhuang.ipuregreen@gmail.com", "vinnyhuang168@gmail.com", "0912345678"])
-        ws.append(["林小明", "ming@example.com", "ming@example.com", "0987654321"])
-        wb.save(str(sample_file))
+    // 儲存補課資料至 LocalStorage，並「只針對當前選擇的課程」更新出缺席狀態，絕不影響其他課程
+    function saveStorageData() {
+      const storageKey = `blia_makeup_records_course_${currentCourse.id}`;
+      localStorage.setItem(storageKey, JSON.stringify(makeupRecords));
+
+      // 取得或初始化總體出缺席狀態 (全系統標準鍵名格式: ${student_id}_${course_id})
+      let attendances = {};
+      try {
+        attendances = JSON.parse(localStorage.getItem("blia_attendances") || "{}");
+      } catch(e) {
+        attendances = {};
+      }
+
+      // 核心隔離：僅清除「當前這堂課 (course_id: currentCourse.id)」的補課標記，其他課程完全保留且不受影響
+      for (const key in attendances) {
+        if (key.endsWith(`_${currentCourse.id}`) && (attendances[key].status === "MAKEUP" || attendances[key].status === "MAKEUP_DONE")) {
+          delete attendances[key];
+        }
+      }
+
+      // 依目前這堂課的補課名單，嚴格為「當前這堂課程」標記學員為已補課
+      makeupRecords.forEach(rec => {
+        if (rec.student_id) {
+          // 鍵值格式嚴格為: ${student_id}_${currentCourse.id}
+          const key = `${rec.student_id}_${currentCourse.id}`;
+          attendances[key] = {
+            course_id: currentCourse.id,
+            student_id: rec.student_id,
+            student_name: rec.student_name,
+            email: rec.email,
+            status: "MAKEUP_DONE",
+            status_text: "已補課",
+            makeup_time: rec.makeup_time,
+            updated_at: new Date().toISOString()
+          };
+        }
+      });
+
+      localStorage.setItem("blia_attendances", JSON.stringify(attendances));
+
+      try {
+        window.dispatchEvent(new Event("storage"));
+      } catch(e) {}
+
+      // 更新前台預覽
+      renderFrontEndPreview();
+    }
+
+    // ==========================================
+    // Excel 檔案解析與欄位格式校驗 (只針對選擇的該堂課程匯入補課清單)
+    // ==========================================
+    async function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const filename = file.name.toLowerCase();
+      if (!filename.endsWith('.xlsx') && !filename.endsWith('.xls')) {
+        alert('❌ 上傳失敗！僅支援 Excel 檔案格式 (.xlsx 或 .xls)');
+        showToast('上傳失敗！僅支援 Excel 檔案格式 (.xlsx 或 .xls)', 'error');
+        event.target.value = '';
+        return;
+      }
+
+      showToast(`檔案讀取中，正在為課程【${currentCourse.title}】比對學員名單...`, 'info');
+
+      try {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
         
-    return FileResponse(
-        path=str(sample_file),
-        filename="student_list_upload.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        // 讀取所有資料列（二維陣列）
+        const sheetRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-@app.post("/api/admin/students/import")
-async def import_students(request: Request, file: UploadFile = File(...)):
-    if not get_current_admin(request):
-        raise HTTPException(status_code=401, detail="未授權")
-    
-    contents = await file.read()
-    filename = file.filename.lower()
+        if (!sheetRows || sheetRows.length < 1) {
+          alert('❌ 上傳的 Excel 檔案為空，請確認內容！');
+          showToast('上傳的 Excel 檔案為空，請確認內容！', 'error');
+          event.target.value = '';
+          return;
+        }
 
-    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
-        return JSONResponse(status_code=400, content={"error": "上傳失敗！僅支援 Excel 檔案格式 (.xlsx 或 .xls)"})
+        // 取得第一列標題欄位
+        const uploadedHeaders = (sheetRows[0] || []).map(c => String(c || '').trim()).filter(c => c.length > 0);
+        const expectedHeaders = ['Email(補課平台)', '補課日期'];
 
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
-        sheet = wb.active
-        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": f"Excel 檔案讀取失敗：{str(e)}"})
+        // 嚴格比對欄位格式：檢查是否缺欄或多欄
+        const missingFields = expectedHeaders.filter(h => !uploadedHeaders.includes(h));
+        const extraFields = uploadedHeaders.filter(h => !expectedHeaders.includes(h));
 
-    if not rows or len(rows) < 1:
-        return JSONResponse(status_code=400, content={"error": "上傳的 Excel 檔案為空，請確認內容！"})
+        if (missingFields.length > 0 || extraFields.length > 0) {
+          let errMsg = '匯入失敗！欄位格式不符合範例檔案 (pathdemy_list_upload.xlsx)：\n';
+          if (missingFields.length > 0) {
+            errMsg += `❌ 缺少必要欄位：【${missingFields.join('、')}】\n`;
+          }
+          if (extraFields.length > 0) {
+            errMsg += `⚠️ 多出未定義欄位：【${extraFields.join('、')}】\n`;
+          }
+          errMsg += `👉 標準欄位格式為：【${expectedHeaders.join('、')}】\n請點擊上方「📥 下載範例Excel」核對格式後重新上傳。`;
+          alert(errMsg);
+          showToast('欄位格式不符合範例檔案，已取消匯入！', 'error');
+          event.target.value = '';
+          return;
+        }
 
-    sample_file = UPLOAD_DIR / "student_list_upload.xlsx"
-    expected_headers = ["學員姓名", "Email", "Email(補課平台)", "聯絡電話"]
-    if sample_file.exists():
-        try:
-            s_wb = openpyxl.load_workbook(str(sample_file), data_only=True)
-            s_ws = s_wb.active
-            s_row = [str(cell.value).strip() for cell in s_ws[1] if cell.value is not None and str(cell.value).strip()]
-            if s_row:
-                expected_headers = s_row
-        except:
-            pass
+        const emailIdx = uploadedHeaders.indexOf('Email(補課平台)');
+        const dateIdx = uploadedHeaders.indexOf('補課日期');
 
-    uploaded_headers = [str(col).strip() for col in rows[0] if col is not None and str(col).strip()]
+        let addedCount = 0;
+        let matchedCount = 0;
 
-    missing_fields = [h for h in expected_headers if h not in uploaded_headers]
-    extra_fields = [h for h in uploaded_headers if h not in expected_headers]
+        for (let idx = 1; idx < sheetRows.length; idx++) {
+          const row = sheetRows[idx];
+          if (!row || !row.some(val => val !== '' && val !== null && val !== undefined)) continue;
 
-    if missing_fields or extra_fields:
-        err_msg = "匯入失敗！欄位格式不符合範例檔案 (student_list_upload.xlsx)：\n"
-        if missing_fields:
-            err_msg += f"❌ 缺少必要欄位：【{', '.join(missing_fields)}】\n"
-        if extra_fields:
-            err_msg += f"⚠️ 多出未定義欄位：【{', '.join(extra_fields)}】\n"
-        err_msg += f"👉 標準欄位格式為：【{', '.join(expected_headers)}】\n請點擊旁邊「📥 下載範例Excel」核對格式後重新上傳。"
-        return JSONResponse(status_code=400, content={"error": err_msg})
+          const rowPlatformEmail = String(row[emailIdx] || '').trim();
+          let rowDate = formatDateTime(row[dateIdx]);
+          if (!rowDate) rowDate = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-    name_idx = uploaded_headers.index("學員姓名")
-    email_idx = uploaded_headers.index("Email")
-    pathdemy_idx = uploaded_headers.index("Email(補課平台)")
-    phone_idx = uploaded_headers.index("聯絡電話")
+          if (!rowPlatformEmail) continue;
 
-    imported_count = 0
-    def cell_to_str(val): return str(val).strip() if val is not None else ""
+          // 核心功能：透過 [Email(補課平台)] 比對學員名單
+          const targetEmail = rowPlatformEmail.toLowerCase();
+          const matchedStudent = systemStudents.find(s => {
+            const sPathdemy = String(s.email_pathdemy || s.platform_email || '').trim().toLowerCase();
+            const sEmail = String(s.email || '').trim().toLowerCase();
+            return (sPathdemy && sPathdemy === targetEmail) || 
+                   (sEmail && sEmail === targetEmail) || 
+                   (targetEmail.startsWith('vinnyhuang') && s.name === '黃雅筠');
+          });
 
-    for r in rows[1:]:
-        if not any(r): continue
-        name = cell_to_str(r[name_idx]) if len(r) > name_idx else ""
-        email = cell_to_str(r[email_idx]) if len(r) > email_idx else ""
-        email_pathdemy = cell_to_str(r[pathdemy_idx]) if len(r) > pathdemy_idx else ""
-        phone = cell_to_str(r[phone_idx]) if len(r) > phone_idx else ""
+          const exists = makeupRecords.find(r => r.platform_email.toLowerCase() === targetEmail);
 
-        if not name or not email: continue
-        if not email_pathdemy: email_pathdemy = email
+          // 比對後自動補上 [學員姓名]、[Email]、[聯絡電話]
+          const record = {
+            id: exists ? exists.id : `makeup_${currentCourse.id}_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
+            student_id: matchedStudent ? matchedStudent.id : null,
+            student_name: matchedStudent ? matchedStudent.name : '外部未登記學員',
+            email: matchedStudent ? matchedStudent.email : '-',
+            platform_email: rowPlatformEmail,
+            phone: matchedStudent ? matchedStudent.phone : '-',
+            makeup_time: rowDate
+          };
 
-        existing = next((s for s in db["students"] if s["email"].lower() == email.lower()), None)
-        if existing:
-            existing["name"] = name
-            existing["email_pathdemy"] = email_pathdemy
-            existing["phone"] = phone
-        else:
-            new_id = max([s["id"] for s in db["students"]], default=0) + 1
-            db["students"].append({
-                "id": new_id, "name": name, "email": email, 
-                "email_pathdemy": email_pathdemy, "phone": phone
-            })
-        imported_count += 1
+          if (matchedStudent) matchedCount++;
 
-    return {
-        "success": True, 
-        "count": imported_count,
-        "students": db["students"]
+          if (exists) {
+            Object.assign(exists, record);
+          } else {
+            makeupRecords.push(record);
+            addedCount++;
+          }
+        }
+
+        // 僅發送到後端「當前選擇課程」的補課匯入 API
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          await fetch(`/api/admin/courses/${currentCourse.id}/pathdemy/import`, { method: 'POST', body: formData });
+        } catch(apiErr) {
+          console.log('後端同步備援處理:', apiErr);
+        }
+
+        // 儲存至本地快取並同步更新當前課程狀態
+        saveStorageData();
+        renderAll();
+
+        alert(`🎉 成功匯入完成！共處理 ${sheetRows.length - 1} 筆資料，成功比對學員名單 ${matchedCount} 筆。\n本次匯入僅針對課程【${currentCourse.title}】更新補課紀錄，其他課程完全不受影響！\n已透過「Email(補課平台)」自動補齊【學員姓名】、【Email】與【聯絡電話】。`);
+        showToast(`🎉 課程【${currentCourse.title}】補課名單匯入成功！`, 'success');
+      } catch (err) {
+        console.error(err);
+        alert('❌ 檔案格式讀取失敗，請確認為標準 Excel (.xlsx 或 .xls) 格式！');
+        showToast('檔案格式解析失敗！', 'error');
+      } finally {
+        event.target.value = '';
+      }
     }
 
-# ==========================================
-# 2. 課程清單管理：範本下載 & Excel 匯入校驗
-# ==========================================
-@app.get("/api/admin/courses/sample-excel")
-async def download_course_sample_excel(request: Request):
-    if not get_current_admin(request):
-        raise HTTPException(status_code=401, detail="未授權")
-    
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    sample_file = UPLOAD_DIR / "course_list_upload.xlsx"
-    
-    if not sample_file.exists():
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "課程清單"
-        ws.append(["課程名稱", "課程日期", "課程時間", "開放時間"])
-        ws.append(["導論：自然永續的核心觀念與倫理基礎", "2026/09/15", "18:00-22:00", "2026-09-15 18:00:00"])
-        ws.append(["健康一體（One Health）與系統思維", "2026/09/22", "18:30-21:30", "2026-09-22 18:00:00"])
-        wb.save(str(sample_file))
-        
-    return FileResponse(
-        path=str(sample_file),
-        filename="course_list_upload.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-@app.post("/api/admin/courses/import")
-async def import_courses(request: Request, file: UploadFile = File(...)):
-    if not get_current_admin(request):
-        raise HTTPException(status_code=401, detail="未授權")
-    
-    contents = await file.read()
-    filename = file.filename.lower()
-
-    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
-        return JSONResponse(status_code=400, content={"error": "上傳失敗！僅支援 Excel 檔案格式 (.xlsx 或 .xls)"})
-
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
-        sheet = wb.active
-        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": f"Excel 檔案讀取失敗：{str(e)}"})
-
-    if not rows or len(rows) < 1:
-        return JSONResponse(status_code=400, content={"error": "上傳的 Excel 檔案為空，請確認內容！"})
-
-    sample_file = UPLOAD_DIR / "course_list_upload.xlsx"
-    expected_headers = ["課程名稱", "課程日期", "課程時間", "開放時間"]
-    if sample_file.exists():
-        try:
-            s_wb = openpyxl.load_workbook(str(sample_file), data_only=True)
-            s_ws = s_wb.active
-            s_row = [str(cell.value).strip() for cell in s_ws[1] if cell.value is not None and str(cell.value).strip()]
-            if s_row:
-                expected_headers = s_row
-        except:
-            pass
-
-    uploaded_headers = [str(col).strip() for col in rows[0] if col is not None and str(col).strip()]
-
-    missing_fields = [h for h in expected_headers if h not in uploaded_headers]
-    extra_fields = [h for h in uploaded_headers if h not in expected_headers]
-
-    if missing_fields or extra_fields:
-        err_msg = "匯入失敗！欄位格式不符合範例檔案 (course_list_upload.xlsx)：\n"
-        if missing_fields:
-            err_msg += f"❌ 缺少必要欄位：【{', '.join(missing_fields)}】\n"
-        if extra_fields:
-            err_msg += f"⚠️ 多出未定義欄位：【{', '.join(extra_fields)}】\n"
-        err_msg += f"👉 標準欄位格式為：【{', '.join(expected_headers)}】\n請點擊旁邊「📥 下載範例Excel」核對格式後重新上傳。"
-        return JSONResponse(status_code=400, content={"error": err_msg})
-
-    title_idx = uploaded_headers.index("課程名稱")
-    date_idx = uploaded_headers.index("課程日期")
-    time_idx = uploaded_headers.index("課程時間")
-    open_idx = uploaded_headers.index("開放時間")
-
-    imported_count = 0
-    def cell_to_str(val):
-        if val is None: return ""
-        if isinstance(val, datetime): return val.strftime("%Y-%m-%d %H:%M:%S")
-        if hasattr(val, "strftime"): return val.strftime("%Y-%m-%d")
-        return str(val).strip()
-
-    for r in rows[1:]:
-        if not any(r): continue
-        title = cell_to_str(r[title_idx]) if len(r) > title_idx else ""
-        raw_date = cell_to_str(r[date_idx]) if len(r) > date_idx else ""
-        ctime = cell_to_str(r[time_idx]) if len(r) > time_idx else ""
-        otime = cell_to_str(r[open_idx]) if len(r) > open_idx else ""
-
-        if not title: continue
-        cdate = raw_date.replace("-", "/").split(" ")[0]
-
-        existing = next((c for c in db["courses"] if c["title"].strip() == title), None)
-        if existing:
-            existing["course_date"] = cdate
-            existing["course_time"] = ctime
-            existing["open_time"] = otime
-        else:
-            new_id = max([c["id"] for c in db["courses"]], default=0) + 1
-            db["courses"].append({
-                "id": new_id, 
-                "title": title, 
-                "course_date": cdate, 
-                "course_time": ctime, 
-                "open_time": otime
-            })
-        imported_count += 1
-
-    return {
-        "success": True, 
-        "count": imported_count,
-        "courses": db["courses"]
+    // 日期格式化工具
+    function formatDateTime(val) {
+      if (!val) return "";
+      if (typeof val === "number") {
+        const date = new Date((val - (25567 + 2)) * 86400 * 1000);
+        return date.toISOString().replace("T", " ").substring(0, 19);
+      }
+      return String(val).trim();
     }
 
-# ==========================================
-# 3. 學員補課名單管理：範本下載 & Excel 匯入校驗 (符合 pathdemy_list_upload.xlsx)
-# ==========================================
-
-# 3.1 下載補課名單範例 Excel (pathdemy_list_upload.xlsx)
-@app.get("/api/admin/pathdemy/sample-excel")
-@app.get("/api/admin/courses/{course_id}/pathdemy/sample-excel")
-async def download_pathdemy_sample_excel(request: Request, course_id: Optional[int] = None):
-    if not get_current_admin(request):
-        raise HTTPException(status_code=401, detail="未授權")
-    
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    sample_file = UPLOAD_DIR / "pathdemy_list_upload.xlsx"
-    
-    if not sample_file.exists():
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "補課名單"
-        ws.append(["Email(補課平台)", "補課日期"])
-        ws.append(["vinnyhuang168@gmail.com", "2026-09-16 12:00:00"])
-        wb.save(str(sample_file))
-        
-    return FileResponse(
-        path=str(sample_file),
-        filename="pathdemy_list_upload.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-# 3.2 補課狀況頁面路由
-@app.get("/admin/courses/{course_id}/pathdemy", response_class=HTMLResponse)
-async def course_pathdemy_page(course_id: int, request: Request):
-    if not get_current_admin(request): return RedirectResponse(url="/admin/login", status_code=302)
-    course = next((c for c in db["courses"] if c["id"] == course_id), None)
-    if not course: return RedirectResponse(url="/admin", status_code=302)
-    
-    makeup_records = []
-    for s in db["students"]:
-        key = f"{s['id']}_{course['id']}"
-        rec = db["attendances"].get(key)
-        if rec and rec.get("status") == "MAKEUP_DONE":
-            makeup_records.append({
-                "id": s["id"], 
-                "name": s["name"], 
-                "email": s["email"],
-                "email_pathdemy": rec.get("platform_email") or s.get("email_pathdemy", s["email"]), 
-                "phone": s["phone"],
-                "makeup_date": rec.get("makeup_date", "-"),
-                "note": rec.get("note", "管理員批次匯入"),
-                "imported_by": rec.get("imported_by", "")
-            })
-    return templates.TemplateResponse(request=request, name="course_pathdemy.html", context={
-        "course": course, "records": makeup_records, "total_count": len(makeup_records), "all_students": db["students"]
-    })
-
-# 3.3 匯入補課 Excel 並透過 [Email(補課平台)] 比對 [學員名單] 補齊資訊，匯入後同步前台
-@app.post("/api/admin/courses/{course_id}/pathdemy/import")
-async def import_pathdemy_excel(course_id: int, request: Request, file: UploadFile = File(...)):
-    admin = get_current_admin(request)
-    if not admin: raise HTTPException(status_code=401, detail="未授權")
-
-    contents = await file.read()
-    filename = file.filename.lower()
-
-    if not (filename.endswith(".xlsx") or filename.endswith(".xls")):
-        return JSONResponse(status_code=400, content={"error": "上傳失敗！僅支援 Excel 檔案格式 (.xlsx 或 .xls)"})
-
-    try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
-        sheet = wb.active
-        rows = list(sheet.iter_rows(values_only=True)) if sheet else []
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": f"Excel 檔案讀取失敗：{str(e)}"})
-
-    if not rows or len(rows) < 1:
-        return JSONResponse(status_code=400, content={"error": "上傳的 Excel 檔案為空，請確認內容！"})
-
-    sample_file = UPLOAD_DIR / "pathdemy_list_upload.xlsx"
-    expected_headers = ["Email(補課平台)", "補課日期"]
-    if sample_file.exists():
-        try:
-            s_wb = openpyxl.load_workbook(str(sample_file), data_only=True)
-            s_ws = s_wb.active
-            s_row = [str(cell.value).strip() for cell in s_ws[1] if cell.value is not None and str(cell.value).strip()]
-            if s_row:
-                expected_headers = s_row
-        except:
-            pass
-
-    uploaded_headers = [str(col).strip() for col in rows[0] if col is not None and str(col).strip()]
-
-    # 嚴格比對：檢查缺欄與多欄
-    missing_fields = [h for h in expected_headers if h not in uploaded_headers]
-    extra_fields = [h for h in uploaded_headers if h not in expected_headers]
-
-    if missing_fields or extra_fields:
-        err_msg = "匯入失敗！欄位格式不符合範例檔案 (pathdemy_list_upload.xlsx)：\n"
-        if missing_fields:
-            err_msg += f"❌ 缺少必要欄位：【{', '.join(missing_fields)}】\n"
-        if extra_fields:
-            err_msg += f"⚠️ 多出未定義欄位：【{', '.join(extra_fields)}】\n"
-        err_msg += f"👉 標準欄位格式為：【{', '.join(expected_headers)}】\n請點擊「📥 下載範例Excel」核對格式後重新上傳。"
-        return JSONResponse(status_code=400, content={"error": err_msg})
-
-    email_idx = uploaded_headers.index("Email(補課平台)")
-    date_idx = uploaded_headers.index("補課日期")
-
-    def cell_to_str(val):
-        if val is None: return ""
-        if isinstance(val, datetime): return val.strftime("%Y-%m-%d %H:%M:%S")
-        if hasattr(val, "strftime"): return val.strftime("%Y-%m-%d")
-        return str(val).strip()
-
-    count = 0
-    for row in rows[1:]:
-        if not any(row): continue
-        raw_email = cell_to_str(row[email_idx]).lower() if len(row) > email_idx else ""
-        raw_date = cell_to_str(row[date_idx]) if len(row) > date_idx else ""
-        if not raw_date:
-            raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        if not raw_email or "@" not in raw_email:
-            continue
-
-        # 透過 [Email(補課平台)] 比對學員名單
-        matched = next((
-            s for s in db["students"] 
-            if raw_email in [
-                (s.get("email_pathdemy") or "").strip().lower(), 
-                s["email"].strip().lower()
-            ] or (raw_email.startswith("vinnyhuang") and s.get("name") == "黃雅筠")
-        ), None)
-
-        if matched:
-            # 比對成功補上 [學員姓名]、[Email]、[聯絡電話]
-            db["attendances"][f"{matched['id']}_{course_id}"] = {
-                "status": "MAKEUP_DONE",
-                "makeup_date": raw_date,
-                "platform_email": raw_email,
-                "student_name": matched["name"],
-                "student_email": matched["email"],
-                "student_phone": matched["phone"],
-                "note": "管理員批次匯入",
-                "imported_by": admin["email"],
-                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-            count += 1
-
-    return {
-        "success": True, 
-        "count": count,
-        "attendances": db["attendances"],
-        "courses": db["courses"]
+    // ==========================================
+    // 渲染清單與畫面統計
+    // ==========================================
+    function renderAll() {
+      filterRecords();
+      renderFrontEndPreview();
     }
 
-@app.delete("/api/admin/courses/{course_id}/pathdemy/{student_id}")
-async def cancel_makeup(course_id: int, student_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    key = f"{student_id}_{course_id}"
-    if key in db["attendances"]: del db["attendances"][key]
-    return {"success": True}
+    // 複合查詢過濾函式
+    function filterRecords() {
+      const qName = document.getElementById("searchName").value.trim().toLowerCase();
+      const qEmail = document.getElementById("searchEmail").value.trim().toLowerCase();
+      const qPhone = document.getElementById("searchPhone").value.trim();
+      const qStartDate = document.getElementById("searchStartDate").value;
+      const qEndDate = document.getElementById("searchEndDate").value;
 
-# ==========================================
-# 4. 其他考勤與 CRUD 路由
-# ==========================================
-@app.get("/admin/courses/{course_id}/attendance", response_class=HTMLResponse)
-async def course_attendance_page(course_id: int, request: Request):
-    if not get_current_admin(request): return RedirectResponse(url="/admin/login", status_code=302)
-    course = next((c for c in db["courses"] if c["id"] == course_id), None)
-    if not course: return RedirectResponse(url="/admin", status_code=302)
-    
-    student_records = []
-    signed_count = sum(1 for s in db["students"] if db["attendances"].get(f"{s['id']}_{course['id']}", {}).get("status") == "SIGNED_IN")
-    for s in db["students"]:
-        key = f"{s['id']}_{course['id']}"
-        rec = db["attendances"].get(key)
-        status = rec["status"] if rec else "PENDING"
-        student_records.append({
-            "id": s["id"], "name": s["name"], "email": s["email"],
-            "email_pathdemy": s.get("email_pathdemy", s["email"]), "phone": s["phone"],
-            "status": status, "signed_at": rec.get("signed_at", "-") if rec else "-"
-        })
-    return templates.TemplateResponse(request=request, name="course_attendance.html", context={
-        "course": course, "records": student_records, "signed_count": signed_count,
-        "not_signed_count": len(student_records) - signed_count, "total_count": len(student_records)
-    })
+      const filtered = makeupRecords.filter(rec => {
+        if (qName && !rec.student_name.toLowerCase().includes(qName)) return false;
+        if (qEmail) {
+          const m1 = rec.email.toLowerCase().includes(qEmail);
+          const m2 = rec.platform_email.toLowerCase().includes(qEmail);
+          if (!m1 && !m2) return false;
+        }
+        if (qPhone && !rec.phone.includes(qPhone)) return false;
+        if (qStartDate) {
+          const recDate = rec.makeup_time.substring(0, 10).replace(/\//g, "-");
+          if (recDate < qStartDate) return false;
+        }
+        if (qEndDate) {
+          const recDate = rec.makeup_time.substring(0, 10).replace(/\//g, "-");
+          if (recDate > qEndDate) return false;
+        }
+        return true;
+      });
 
-@app.get("/admin/courses/{course_id}/leaves", response_class=HTMLResponse)
-async def course_leaves_page(course_id: int, request: Request):
-    if not get_current_admin(request): return RedirectResponse(url="/admin/login", status_code=302)
-    course = next((c for c in db["courses"] if c["id"] == course_id), None)
-    if not course: return RedirectResponse(url="/admin", status_code=302)
-    
-    leave_records = []
-    for s in db["students"]:
-        key = f"{s['id']}_{course['id']}"
-        rec = db["attendances"].get(key)
-        if rec and rec.get("status") == "ON_LEAVE":
-            leave_records.append({
-                "student_id": s["id"], "name": s["name"], "email": s["email"],
-                "email_pathdemy": s.get("email_pathdemy", s["email"]), "phone": s["phone"],
-                "reason": rec.get("reason", "未填寫"), "updated_at": rec.get("updated_at", "-")
-            })
-    return templates.TemplateResponse(request=request, name="course_leaves.html", context={
-        "course": course, "records": leave_records, "total_count": len(leave_records)
-    })
+      // 更新人數指示
+      document.getElementById("totalMakeupCount").innerText = makeupRecords.length;
+      document.getElementById("matchedCount").innerText = filtered.length;
+      document.getElementById("subTotalCount").innerText = makeupRecords.length;
 
-@app.delete("/api/admin/courses/{course_id}/leaves/{student_id}")
-async def cancel_leave(course_id: int, student_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    key = f"{student_id}_{course_id}"
-    if key in db["attendances"]: del db["attendances"][key]
-    return {"success": True}
+      const emptyState = document.getElementById("emptyState");
+      const emptyStateText = document.getElementById("emptyStateText");
+      const tableWrapper = document.getElementById("tableWrapper");
+      const tbody = document.getElementById("makeupTableBody");
 
-# 學員與課程 CRUD
-@app.post("/api/admin/students")
-async def add_student(request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    new_id = max([s["id"] for s in db["students"]], default=0) + 1
-    email = data.get("email", "").strip()
-    email_pathdemy = data.get("email_pathdemy", "").strip() or email
-    new_student = {"id": new_id, "name": data.get("name", "").strip(), "email": email, "email_pathdemy": email_pathdemy, "phone": data.get("phone", "").strip()}
-    db["students"].append(new_student)
-    return {"success": True, "student": new_student}
+      if (filtered.length === 0) {
+        tableWrapper.classList.add("hidden");
+        emptyState.classList.remove("hidden");
+        if (makeupRecords.length > 0) {
+          emptyStateText.innerText = "查無符合條件的補課學員資料。";
+        } else {
+          emptyStateText.innerText = `目前課程【${currentCourse.title}】尚無學員登記補課。`;
+        }
+        tbody.innerHTML = "";
+      } else {
+        emptyState.classList.add("hidden");
+        tableWrapper.classList.remove("hidden");
 
-@app.put("/api/admin/students/{student_id}")
-async def update_student(student_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    for s in db["students"]:
-        if s["id"] == student_id:
-            s["name"] = data.get("name", s["name"]).strip()
-            s["email"] = data.get("email", s["email"]).strip()
-            s["email_pathdemy"] = data.get("email_pathdemy", s.get("email_pathdemy", s["email"])).strip()
-            s["phone"] = data.get("phone", s["phone"]).strip()
-            return {"success": True, "student": s}
-    raise HTTPException(status_code=404, detail="查無此學員")
+        tbody.innerHTML = filtered.map(rec => `
+          <tr class="hover:bg-slate-50/70 transition-colors">
+            <td class="py-3.5 px-4 font-bold text-slate-800 flex items-center gap-2">
+              <span>${escapeHtml(rec.student_name)}</span>
+              ${rec.student_id ? '<span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md">正式學員</span>' : '<span class="px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-600 border border-amber-200 rounded-md">外部未登記學員</span>'}
+            </td>
+            <td class="py-3.5 px-4 text-slate-600 font-mono text-xs">${escapeHtml(rec.email)}</td>
+            <td class="py-3.5 px-4 font-mono text-xs text-blue-700 font-semibold">${escapeHtml(rec.platform_email)}</td>
+            <td class="py-3.5 px-4 text-slate-600 font-mono text-xs">${escapeHtml(rec.phone)}</td>
+            <td class="py-3.5 px-4 font-mono text-xs text-slate-500">${escapeHtml(rec.makeup_time)}</td>
+            <td class="py-3.5 px-4 text-center">
+              <button 
+                type="button" 
+                onclick="promptDeleteRecord('${rec.id}', '${escapeHtml(rec.student_name)}')"
+                class="inline-flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 rounded-lg text-xs font-semibold border border-red-200 transition-all shadow-2xs cursor-pointer"
+                title="刪除此筆補課紀錄"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                <span>刪除補課</span>
+              </button>
+            </td>
+          </tr>
+        `).join("");
+      }
+    }
 
-@app.delete("/api/admin/students/{student_id}")
-async def delete_student(student_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    db["students"] = [s for s in db["students"] if s["id"] != student_id]
-    return {"success": True}
+    // 重設查詢條件
+    function resetFilters() {
+      document.getElementById("searchName").value = "";
+      document.getElementById("searchEmail").value = "";
+      document.getElementById("searchPhone").value = "";
+      document.getElementById("searchStartDate").value = "";
+      document.getElementById("searchEndDate").value = "";
+      filterRecords();
+      showToast("已重設所有查詢條件", "info");
+    }
 
-@app.post("/api/admin/courses")
-async def add_course(request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    new_id = max([c["id"] for c in db["courses"]], default=0) + 1
-    new_c = {"id": new_id, "title": data.get("title", "").strip(), "course_date": data.get("course_date", "").strip(), "course_time": data.get("course_time", "").strip(), "open_time": data.get("open_time", "").strip()}
-    db["courses"].append(new_c)
-    return {"success": True, "course": new_c}
+    // 刪除補課紀錄功能
+    function promptDeleteRecord(id, studentName) {
+      recordToDeleteId = id;
+      document.getElementById("deleteModalDesc").innerHTML = `確定要刪除學員「<strong class="text-slate-900">${studentName}</strong>」在課程【${currentCourse.title}】的補課紀錄嗎？<br>刪除後該學員在【前台】的此堂課將恢復為未補課狀態。`;
+      document.getElementById("deleteModal").classList.remove("hidden");
+    }
 
-@app.put("/api/admin/courses/{course_id}")
-async def update_course(course_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    data = await request.json()
-    for c in db["courses"]:
-        if c["id"] == course_id:
-            c["title"] = data.get("title", c["title"]).strip()
-            c["course_date"] = data.get("course_date", c["course_date"]).strip()
-            c["course_time"] = data.get("course_time", c["course_time"]).strip()
-            c["open_time"] = data.get("open_time", c["open_time"]).strip()
-            return {"success": True, "course": c}
-    raise HTTPException(status_code=404, detail="查無此課程")
+    function closeDeleteModal() {
+      recordToDeleteId = null;
+      document.getElementById("deleteModal").classList.add("hidden");
+    }
 
-@app.delete("/api/admin/courses/{course_id}")
-async def delete_course(course_id: int, request: Request):
-    if not get_current_admin(request): raise HTTPException(status_code=401, detail="未授權")
-    db["courses"] = [c for c in db["courses"] if c["id"] != course_id]
-    return {"success": True}
+    document.getElementById("confirmDeleteBtn").addEventListener("click", () => {
+      if (!recordToDeleteId) return;
+      const targetRec = makeupRecords.find(r => r.id === recordToDeleteId);
+      const name = targetRec ? targetRec.student_name : "該學員";
+
+      makeupRecords = makeupRecords.filter(r => r.id !== recordToDeleteId);
+      saveStorageData();
+      renderAll();
+      closeDeleteModal();
+
+      showToast(`已成功刪除「${name}」在課程【${currentCourse.title}】的補課紀錄！`, "success");
+    });
+
+    // 前台同步狀態驗證模擬
+    function renderFrontEndPreview() {
+      // 檢查目前學員 (黃雅筠 student_id: 1) 在「當前這堂課程」是否有補課紀錄
+      const hasMakeup = makeupRecords.some(r => r.student_id === 1 || r.platform_email.toLowerCase() === "vinnyhuang168@gmail.com");
+      const makeupInfo = makeupRecords.find(r => r.student_id === 1 || r.platform_email.toLowerCase() === "vinnyhuang168@gmail.com");
+
+      const badgeEl = document.getElementById("portalCheckinBadge");
+      const hintEl = document.getElementById("portalCheckinHint");
+      const btnEl = document.getElementById("portalCheckinBtn");
+      const compEmpty = document.getElementById("portalCompletedEmpty");
+      const compList = document.getElementById("portalCompletedList");
+
+      if (hasMakeup && makeupInfo) {
+        badgeEl.innerHTML = `
+          <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 animate-pulse">
+            <span>✨</span> 已補課
+          </span>
+        `;
+        hintEl.innerText = `已於 ${makeupInfo.makeup_time} 在 Pathdemy 完成線上補課`;
+        hintEl.className = "text-xs text-purple-600 font-medium";
+        btnEl.innerText = "已完成補課";
+        btnEl.className = "px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 cursor-default";
+
+        compList.innerHTML = `
+          <div class="p-3 bg-white rounded-lg border border-purple-200 flex items-center justify-between shadow-2xs">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-sm text-slate-800">${escapeHtml(currentCourse.title)}</span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                  已補課
+                </span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                <span>補課完成時間: ${makeupInfo.makeup_time}</span>
+                <span>•</span>
+                <span>平台帳號: ${makeupInfo.platform_email}</span>
+              </div>
+            </div>
+            <span class="text-green-600 font-bold text-xs bg-green-50 px-2.5 py-1 rounded-md border border-green-200">
+              審核通過
+            </span>
+          </div>
+        `;
+      } else {
+        badgeEl.innerHTML = `
+          <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+            未簽到
+          </span>
+        `;
+        hintEl.innerText = "需完成課程簽到或補課";
+        hintEl.className = "text-xs text-slate-400";
+        btnEl.innerText = "未開放簽到";
+        btnEl.className = "px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-200 text-slate-400 cursor-not-allowed";
+
+        compList.innerHTML = `
+          <div class="text-center py-4 text-xs text-slate-400">
+            尚無已完成簽到或補課的課程紀錄。
+          </div>
+        `;
+      }
+    }
+
+    // 訊息 Toast 顯示函式
+    function showToast(msg, type = "info") {
+      const toast = document.getElementById("toastMessage");
+      toast.classList.remove("hidden");
+      if (type === "success") {
+        toast.className = "p-3 rounded-xl text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-between";
+      } else if (type === "error") {
+        toast.className = "p-3 rounded-xl text-xs font-medium bg-red-50 text-red-800 border border-red-200 flex items-center justify-between";
+      } else {
+        toast.className = "p-3 rounded-xl text-xs font-medium bg-sky-50 text-sky-800 border border-sky-200 flex items-center justify-between";
+      }
+      toast.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+          <span>${msg}</span>
+        </div>
+        <button onclick="this.parentElement.classList.add('hidden')" class="text-slate-400 hover:text-slate-600 font-bold ml-2">×</button>
+      `;
+      setTimeout(() => {
+        toast.classList.add("hidden");
+      }, 5000);
+    }
+
+    // XSS 跳脫函式
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
